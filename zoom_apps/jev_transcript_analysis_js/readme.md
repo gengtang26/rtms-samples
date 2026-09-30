@@ -185,18 +185,6 @@ docker run --rm \
   rtms-jev-sales-copilot
 ```
 
-## Design References
-
-These public projects informed the architecture, but no source code was copied from them:
-
-- [TypeSafe AI documentation](https://docs.typesafe.ai/) describes Jev's typed Choice, Score, and Noul decisions.
-- [OpenRouter's TypeSafe model page](https://openrouter.ai/typesafe/jev-1.13) documents gateway access to Jev.
-- [jev-girlfriend-analysis](https://github.com/ycs77/jev-girlfriend-analysis) demonstrates translating a conversation into bounded state and an application-selected action.
-- [Vibecheck](https://github.com/Neoo-Blue/vibecheck) uses fast Jev triage before optional deeper analysis and keeps reply generation separate.
-- [jev-voice-agent](https://github.com/dg-coreylweathers/jev-voice-agent) lets Jev choose from reviewed responses rather than pretending it generates prose.
-- [typed-decisions-shadow-layer](https://github.com/alonsuare/typed-decisions-shadow-layer) demonstrates sales/CRM intent, urgency, and confidence decisions while leaving production actions untouched.
-- [Stanley](https://github.com/armansra-hub/stanley) separates Jev-based sales intelligence from a generative chat model.
-
 ## Troubleshooting
 
 | Symptom | Check |
