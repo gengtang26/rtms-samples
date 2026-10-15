@@ -98,7 +98,7 @@ export function connectToSignalingWebSocket(
   clientId,
   clientSecret,
   emit,
-  mediaTypesFlag = 32
+  mediaTypesFlag
 ) {
   FileLogger.log(`[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] Connecting...`);
 

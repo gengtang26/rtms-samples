@@ -84,12 +84,12 @@ function emitVideoParticipantSnapshot(eventName, participants, msg, meetingUuid,
 
 function shouldSubscribeToIndividualVideoEvents(conn, mediaTypesFlag) {
   const protocol = getProtocolDefinitions(conn.config);
-  const requestedVideo = mediaTypesFlag === 32 || Boolean(mediaTypesFlag & TYPE_FLAGS.video);
+  const requestedVideo = Boolean(mediaTypesFlag & TYPE_FLAGS.video);
   return requestedVideo && conn.config?.mediaParams?.video?.data_opt === protocol.mediaDataOptions.VIDEO_SINGLE_INDIVIDUAL_STREAM;
 }
 
 function shouldSubscribeToChatGroupEvents(mediaTypesFlag) {
-  return mediaTypesFlag === 32 || Boolean(mediaTypesFlag & TYPE_FLAGS.chat);
+  return Boolean(mediaTypesFlag & TYPE_FLAGS.chat);
 }
 
 function emitChatGroupEvent(eventName, msg, meetingUuid, streamId, conn, emit) {
@@ -221,49 +221,29 @@ export function handleSignalingMessage(data, meetingUuid, streamId, signalingWs,
         
         FileLogger.log(`[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] Requested media: ${mediaTypesFlag}, available: ${effectiveFlags}`);
         
-        // Check if unified mode is enabled (single socket for all media types)
-        const useUnifiedMode = conn.config?.useUnifiedMediaSocket === true;
-        
-        if (useUnifiedMode && msg.media_server?.server_urls?.all) {
-          // Unified mode requires the dedicated "all" media endpoint.
-          FileLogger.log(`[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] Connecting unified media socket`);
-          connectToMediaWebSocket(
-            msg.media_server.server_urls.all,
-            meetingUuid,
-            streamId,
-            signalingWs,
-            conn,
-            clientId,
-            clientSecret,
-            'all',
-            mediaTypesFlag === 32 ? 32 : effectiveFlags,
-            emit
-          );
-        } else {
-          if (useUnifiedMode) {
-            FileLogger.warn(
-              `[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] Unified media socket requested, but media_server.server_urls.all is unavailable. Falling back to split media sockets.`
-            );
-          }
-
-          // Split mode: separate socket per media type
-          for (const [type, flag] of Object.entries(TYPE_FLAGS)) {
-            if (effectiveFlags & flag) {
-              const typeUrl = getPreferredMediaUrl(conn.rtmsType, msg.media_server?.server_urls, type) || mediaUrl;
-              FileLogger.log(`[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] Connecting ${type} media socket`);
-              connectToMediaWebSocket(
-                typeUrl,
-                meetingUuid,
-                streamId,
-                signalingWs,
-                conn,
-                clientId,
-                clientSecret,
-                type,
-                flag,
-                emit
+        // One concrete media type per data socket and handshake.
+        for (const [type, flag] of Object.entries(TYPE_FLAGS)) {
+          if (effectiveFlags & flag) {
+            const typeUrl = getPreferredMediaUrl(conn.rtmsType, msg.media_server?.server_urls, type);
+            if (!typeUrl) {
+              FileLogger.warn(
+                `[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] No media URL returned for requested type ${type}`
               );
+              continue;
             }
+            FileLogger.log(`[Signaling] [${conn.rtmsType},${meetingUuid},${streamId}] Connecting ${type} media socket`);
+            connectToMediaWebSocket(
+              typeUrl,
+              meetingUuid,
+              streamId,
+              signalingWs,
+              conn,
+              clientId,
+              clientSecret,
+              type,
+              flag,
+              emit
+            );
           }
         }
 

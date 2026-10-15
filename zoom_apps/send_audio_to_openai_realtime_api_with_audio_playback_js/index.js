@@ -37,7 +37,6 @@ const sourceAudioSampleRate = Number.parseInt(process.env.AUDIO_SAMPLE_RATE || '
 const rtmsConfig = {
   logging: process.env.RTMS_LOGGING || 'info',
   logDir: path.join(__dirname, 'logs'),
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
   mediaTypesFlag: 1, // Audio only
   credentials: {
     meeting: {

@@ -77,11 +77,10 @@ class ProductCredentials:
 @dataclass
 class RTMSConfig:
     credentials: ProductCredentials = field(default_factory=ProductCredentials)
-    media_types: int = MediaType.ALL
+    media_types: int = 0
     media_params: MediaParams = field(default_factory=MediaParams)
     logging: str = 'info'
     log_dir: Optional[str] = None
-    use_unified_media_socket: bool = False
     enable_gap_filling: bool = False
     max_stream_history_size: int = 100
     reconnect_delay: int = 3000
@@ -195,7 +194,7 @@ class RTMSConfigHelper:
             config.credentials.phone = Credentials(**shared_credentials.__dict__)
         
         if 'media_types' in options or 'mediaTypes' in options:
-            config.media_types = options.get('media_types', options.get('mediaTypes', MediaType.ALL))
+            config.media_types = options.get('media_types', options.get('mediaTypes', 0))
         
         if 'logging' in options:
             config.logging = options['logging']
@@ -203,15 +202,28 @@ class RTMSConfigHelper:
         if 'log_dir' in options or 'logDir' in options:
             config.log_dir = options.get('log_dir', options.get('logDir'))
         
-        if 'use_unified_media_socket' in options or 'useUnifiedMediaSocket' in options:
-            config.use_unified_media_socket = options.get(
-                'use_unified_media_socket', 
-                options.get('useUnifiedMediaSocket', False)
+        unified_requested = options.get(
+            'use_unified_media_socket', options.get('useUnifiedMediaSocket', False)
+        ) is True
+        socket_mode = options.get(
+            'media_socket_connection_mode', options.get('mediaSocketConnectionMode', '')
+        )
+        if unified_requested or str(socket_mode).lower() == 'unified':
+            raise ValueError(
+                'Unified RTMS media sockets and media type 32 are deprecated. '
+                'Select explicit media_types; the library opens one split socket per media type.'
             )
-        elif 'media_socket_connection_mode' in options or 'mediaSocketConnectionMode' in options:
-            mode = options.get('media_socket_connection_mode', options.get('mediaSocketConnectionMode', 'split'))
-            if isinstance(mode, str):
-                config.use_unified_media_socket = mode.lower() == 'unified'
+
+        try:
+            selected_media = int(config.media_types)
+        except (TypeError, ValueError):
+            selected_media = 0
+        if selected_media <= 0 or selected_media > 31:
+            raise ValueError(
+                'media_types is required and must combine concrete RTMS media values: '
+                'audio (1), video (2), screen share (4), transcript (8), and chat (16). '
+                'The ALL value 32 is deprecated.'
+            )
 
         if 'enable_gap_filling' in options or 'enableGapFilling' in options or 'enableRealTimeAudioVideoGapFiller' in options:
             config.enable_gap_filling = options.get(

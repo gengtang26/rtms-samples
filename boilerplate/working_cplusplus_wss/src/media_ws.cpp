@@ -34,7 +34,7 @@ void connect_to_media_server(
     });
 
     c.set_open_handler([&](websocketpp::connection_hdl hdl) {
-        json all_media_params = {
+        json media_params_by_type = {
             {"audio", {
                 {"content_type", 2}, {"sample_rate", 1}, {"channel", 1},
                 {"codec", 1}, {"data_opt", 1}, {"send_rate", 100}
@@ -51,9 +51,7 @@ void connect_to_media_server(
             }},
             {"chat", {{"content_type", 5}}}
         };
-        json media_params = media_name == "all"
-            ? all_media_params
-            : json{{media_name, all_media_params[media_name]}};
+        json media_params = json{{media_name, media_params_by_type[media_name]}};
         json handshake = {
             {"msg_type", 3},
             {"protocol_version", 1},

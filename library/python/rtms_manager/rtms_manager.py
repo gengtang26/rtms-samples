@@ -14,14 +14,9 @@ from .media_socket import connect_to_media_websocket, TYPE_FLAGS
 
 
 def calculate_effective_flags(requested_flags: int, server_urls: Dict[str, Any]) -> int:
-    if requested_flags != MediaType.ALL:
-        return requested_flags
-
     effective_flags = 0
     for type_name, flag in TYPE_FLAGS.items():
-        if type_name == 'all':
-            continue
-        if isinstance(server_urls, dict) and server_urls.get(type_name):
+        if requested_flags & flag and isinstance(server_urls, dict) and server_urls.get(type_name):
             effective_flags |= flag
     return effective_flags
 
@@ -85,9 +80,6 @@ class RTMSManager:
         },
         'VIDEO_RECORDING': {
             'media_types': MediaType.AUDIO | MediaType.VIDEO,
-        },
-        'FULL_MEDIA': {
-            'media_types': MediaType.ALL,
         },
     }
 
@@ -337,33 +329,19 @@ class RTMSManager:
                 media_server.get('server_urls', {}) if isinstance(media_server, dict) else {},
             )
 
-            unified_media_url = None
-            if isinstance(media_server, dict):
-                server_urls = media_server.get('server_urls', {})
-                if isinstance(server_urls, dict):
-                    unified_media_url = server_urls.get('all')
-
-            if self._config.use_unified_media_socket and unified_media_url:
-                await connect_to_media_websocket(
-                    unified_media_url, rtms_id, stream_id, conn_state,
-                    creds.client_id, creds.client_secret,
-                    'all', MediaType.ALL if self._config.media_types == MediaType.ALL else effective_flags, self.emit
-                )
-            else:
-                if self._config.use_unified_media_socket:
-                    FileLogger.warn(
-                        f'[RTMSManager] Unified media socket requested for {rtms_type} {rtms_id}, but media_server.server_urls.all is unavailable. Falling back to split media sockets.'
-                    )
-                for type_name, flag in TYPE_FLAGS.items():
-                    if type_name == 'all':
-                        continue
-                    if effective_flags & flag:
-                        type_url = get_preferred_media_url(rtms_type, media_server.get('server_urls', {}), type_name) or media_url
-                        await connect_to_media_websocket(
-                            type_url, rtms_id, stream_id, conn_state,
-                            creds.client_id, creds.client_secret,
-                            type_name, flag, self.emit
+            for type_name, flag in TYPE_FLAGS.items():
+                if effective_flags & flag:
+                    type_url = get_preferred_media_url(rtms_type, media_server.get('server_urls', {}), type_name)
+                    if not type_url:
+                        FileLogger.warn(
+                            f'[RTMSManager] No media URL returned for requested type {type_name}'
                         )
+                        continue
+                    await connect_to_media_websocket(
+                        type_url, rtms_id, stream_id, conn_state,
+                        creds.client_id, creds.client_secret,
+                        type_name, flag, self.emit
+                    )
 
         await connect_to_signaling_websocket(
             rtms_id, stream_id, server_url, conn_state,

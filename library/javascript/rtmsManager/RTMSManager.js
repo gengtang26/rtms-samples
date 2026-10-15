@@ -18,8 +18,7 @@ const MEDIA = Object.freeze({
   VIDEO: 2,
   SHARESCREEN: 4,
   TRANSCRIPT: 8,
-  CHAT: 16,
-  ALL: 32
+  CHAT: 16
 });
 
 /**
@@ -79,10 +78,6 @@ const PRESETS = Object.freeze({
         fps: 25
       }
     }
-  },
-  /** Full media - all media types (default) */
-  FULL_MEDIA: {
-    mediaTypes: MEDIA.ALL
   }
 });
 
@@ -245,7 +240,7 @@ export class RTMSManager extends EventEmitter {
    * 
    * @param {Object} options - Configuration options
    * @param {Object} options.credentials - Product-keyed credentials or shorthand
-   * @param {number} [options.mediaTypes=RTMSManager.MEDIA.ALL] - Media types to subscribe
+   * @param {number} options.mediaTypes - Explicit media types to subscribe
    * @param {string} [options.logging='off'] - Logging level: 'off'|'error'|'warn'|'info'|'debug'
    * @returns {Promise<RTMSManager>}
    * 
@@ -254,7 +249,8 @@ export class RTMSManager extends EventEmitter {
    * await RTMSManager.init({
    *   clientId: 'xxx',
    *   clientSecret: 'xxx', 
-   *   secretToken: 'xxx'
+   *   secretToken: 'xxx',
+   *   mediaTypes: RTMSManager.MEDIA.AUDIO
    * });
    * 
    * @example

@@ -13,6 +13,20 @@ Zoom Realtime Media Streams (RTMS) allows developers to access realtime media da
 
 > **Note**: RTMS is built on standard WebSocket technology. You do **not** need the SDK or library to access RTMS streams—you can connect directly using any WebSocket client in any language. The [`library/`](./library/) and SDK are provided for convenience, offering helper classes, reconnection managers, and event handling. Feel free to use them as-is, modify them, or implement your own logic for advanced use cases. See [RTMS_CONNECTION_FLOW.md](./RTMS_CONNECTION_FLOW.md) for the raw protocol details.
 
+> **Deprecated:** Unified media socket mode and `media_type: 32` must not be
+> used. Open a separate data connection for each required media type and send
+> one concrete media type per handshake.
+
+Generic boilerplates require an explicit comma-separated media selection:
+
+```env
+RTMS_MEDIA_TYPES=audio,video,transcript
+```
+
+Supported names are `audio`, `video`, `screenshare`, `transcript`, and `chat`.
+Each selected name opens a separate data connection. Purpose-built samples
+select only the media they require in code.
+
 ## Quick Start
 
 ```javascript
@@ -24,6 +38,7 @@ const app = express();
 
 // Initialize
 await RTMSManager.init({
+  mediaTypes: RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.TRANSCRIPT,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,
@@ -278,6 +293,7 @@ For advanced use cases requiring performance optimization or unique customizatio
 
 | Document | Description |
 |----------|-------------|
+| [CHANGELOG.md](./CHANGELOG.md) | User-facing changes and migration notes |
 | [USE_CASES.md](./USE_CASES.md) | Featured samples & code examples |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Connection flow & implementation approaches |
 | [RTMS_CONNECTION_FLOW.md](./RTMS_CONNECTION_FLOW.md) | Raw WebSocket protocol & message types |

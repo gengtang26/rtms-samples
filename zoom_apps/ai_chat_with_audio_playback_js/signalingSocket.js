@@ -194,8 +194,7 @@ export function connectToSignalingWebSocket(
       //     "server_urls": {
       //       "audio": "wss://0.0.0.0:443",
       //       "video": "wss://0.0.0.0:443",
-      //       "transcript": "wss://0.0.0.0:443",
-      //       "all": "wss://0.0.0.0:443"
+      //       "transcript": "wss://0.0.0.0:443"
       //     }
       //   }
       // }
@@ -206,7 +205,10 @@ export function connectToSignalingWebSocket(
         console.log("case 2");
         if (msg.status_code === 0) {
           duplicateSignalRetryCountByStreamId.set(streamId, 0);
-          const mediaUrl = msg.media_server?.server_urls?.all;
+          const mediaUrl = msg.media_server?.server_urls?.transcript;
+          if (!mediaUrl) {
+            throw new Error('Signaling response did not include server_urls.transcript');
+          }
           console.log(`[Signaling] Handshake OK. Media URL: ${mediaUrl}`);
           conn.signaling.state = 'ready';
 

@@ -15,26 +15,32 @@ public class AppConfig {
     @Value("${APP_WEBHOOK_PATH:/webhook}")
     private String webhookPath;
 
-    @Value("${MEDIA_TYPES_FLAG:11}")
-    private int mediaTypesFlag;
+    @Value("${RTMS_MEDIA_TYPES:}")
+    private String mediaTypes;
 
-    @Value("${MEDIA_SOCKET_CONNECTION_MODE:split}")
-    private String mediaSocketConnectionMode;
+    private int mediaTypesFlag;
 
     @PostConstruct
     public void validateMediaConfiguration() {
-        mediaSocketConnectionMode = mediaSocketConnectionMode.trim().toLowerCase();
-        int allIndividualMediaFlags = 1 | 2 | 4 | 8 | 16;
-        if (mediaTypesFlag != 32 &&
-                (mediaTypesFlag <= 0 || (mediaTypesFlag & ~allIndividualMediaFlags) != 0)) {
+        var flagsByName = java.util.Map.of(
+                "audio", 1,
+                "video", 2,
+                "screenshare", 4,
+                "transcript", 8,
+                "chat", 16);
+        var selected = new java.util.HashSet<String>();
+        mediaTypesFlag = 0;
+        for (String rawName : mediaTypes.split(",")) {
+            String name = rawName.trim().toLowerCase();
+            if (name.isEmpty() || !selected.add(name) || !flagsByName.containsKey(name)) {
+                throw new IllegalArgumentException(
+                        "RTMS_MEDIA_TYPES must list unique supported media names; invalid value: " + name);
+            }
+            mediaTypesFlag |= flagsByName.get(name);
+        }
+        if (mediaTypesFlag == 0) {
             throw new IllegalArgumentException(
-                    "MEDIA_TYPES_FLAG must combine 1, 2, 4, 8, and 16, or be 32");
-        }
-        if (!mediaSocketConnectionMode.equals("split") && !mediaSocketConnectionMode.equals("unified")) {
-            throw new IllegalArgumentException("MEDIA_SOCKET_CONNECTION_MODE must be split or unified");
-        }
-        if (mediaSocketConnectionMode.equals("unified") && mediaTypesFlag != 32) {
-            throw new IllegalArgumentException("Unified mode requires MEDIA_TYPES_FLAG=32");
+                    "RTMS_MEDIA_TYPES is required (for example: audio,video,transcript)");
         }
     }
 }

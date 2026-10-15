@@ -41,6 +41,8 @@ public class RtmsService {
     private final Map<String, RtmsConnection> activeConnections = new ConcurrentHashMap<>();
     private final Set<String> signalingHandshakeLocks = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private static final Map<String, Integer> MEDIA_TYPES = Map.of(
+            "audio", 1, "video", 2, "screenshare", 4, "transcript", 8, "chat", 16);
 
     @PreDestroy
     public void shutdown() {
@@ -48,7 +50,7 @@ public class RtmsService {
         activeConnections.values().forEach(connection -> {
             connection.setShouldReconnect(false);
             closeSocket(connection.getSignaling() == null ? null : connection.getSignaling().getSocket());
-            closeSocket(connection.getMedia() == null ? null : connection.getMedia().getSocket());
+            connection.getMedia().values().forEach(media -> closeSocket(media.getSocket()));
         });
         activeConnections.clear();
         signalingHandshakeLocks.clear();
@@ -111,7 +113,8 @@ public class RtmsService {
             // Check if WebSocket connections are still active (OkHttp doesn't have
             // isOpen(), check if not null)
             boolean signalingActive = existingConnection.getSignaling().getSocket() != null;
-            boolean mediaActive = existingConnection.getMedia().getSocket() != null;
+            boolean mediaActive = existingConnection.getMedia().values().stream()
+                    .anyMatch(media -> media.getSocket() != null);
 
             if (signalingActive || mediaActive) {
                 log.warn("RTMS session {} has active connections, skipping new connection attempt", sessionId);
@@ -127,18 +130,12 @@ public class RtmsService {
                 .lastKeepAlive(0)
                 .build();
 
-        RtmsConnection.MediaConnection media = RtmsConnection.MediaConnection.builder()
-                .state(RtmsConnection.MediaConnection.MediaState.IDLE)
-                .lastKeepAlive(0)
-                .build();
-
         RtmsConnection connection = RtmsConnection.builder()
                 .sessionId(sessionId)
                 .streamId(rtmsStreamId)
                 .serverUrls(serverUrls)
                 .shouldReconnect(true)
                 .signaling(signaling)
-                .media(media)
                 .build();
 
         activeConnections.put(sessionId, connection);
@@ -203,29 +200,29 @@ public class RtmsService {
 
     @Async
     public void connectToMediaWebSocket(RtmsConnection conn, String mediaUrl, String sessionID, String streamId,
-            WebSocket signalingSocket, Map<String, RtmsConnection> activeConnections) {
-        log.info("[Media] Connecting for video session {}", conn.getSessionId());
+            WebSocket signalingSocket, Map<String, RtmsConnection> activeConnections,
+            String mediaType, int mediaTypeFlag) {
+        log.info("[Media] Connecting {} for video session {}", mediaType, conn.getSessionId());
 
         try {
 
-            MediaWebSocketListener listener = new MediaWebSocketListener(conn, mediaUrl);
+            RtmsConnection.MediaConnection media = RtmsConnection.MediaConnection.builder()
+                    .state(RtmsConnection.MediaConnection.MediaState.CONNECTING)
+                    .lastKeepAlive(0)
+                    .build();
+            conn.getMedia().put(mediaType, media);
+            MediaWebSocketListener listener = new MediaWebSocketListener(
+                    conn, mediaUrl, mediaType, mediaTypeFlag);
             CompletableFuture<WebSocket> wsFuture = httpClient.newWebSocketBuilder()
                     .buildAsync(URI.create(mediaUrl), listener);
 
             WebSocket webSocket = wsFuture.join();
-            conn.getMedia().setSocket(webSocket);
-            conn.getMedia().setState(RtmsConnection.MediaConnection.MediaState.CONNECTING);
+            media.setSocket(webSocket);
             log.info("[Media] WebSocket instance created successfully");
 
         } catch (Exception e) {
             log.error("[Media] ❌ Failed to create Java WebSocket instance: {}", e.getMessage());
         }
-    }
-
-    // Legacy method for backward compatibility
-    @Async
-    public void connectToMediaWebSocket(RtmsConnection conn, String mediaUrl) {
-        connectToMediaWebSocket(conn, mediaUrl, conn.getSessionId(), conn.getStreamId(), null, activeConnections);
     }
 
     private String generateSignature(String sessionId, String streamId) {
@@ -299,13 +296,13 @@ public class RtmsService {
             conn.getSignaling().getSocket().sendClose(WebSocket.NORMAL_CLOSURE, "Closing session");
         }
 
-        // Close media connection
-        if (conn.getMedia().getSocket() != null) {
-            conn.getMedia().getSocket().sendClose(WebSocket.NORMAL_CLOSURE, "Closing session");
-        }
-
         conn.getSignaling().setState(RtmsConnection.SignalingConnection.SignalingState.DISCONNECTED);
-        conn.getMedia().setState(RtmsConnection.MediaConnection.MediaState.CLOSED);
+        conn.getMedia().values().forEach(media -> {
+            if (media.getSocket() != null) {
+                media.getSocket().sendClose(WebSocket.NORMAL_CLOSURE, "Closing session");
+            }
+            media.setState(RtmsConnection.MediaConnection.MediaState.CLOSED);
+        });
     }
 
     private void processSignalingMessage(RtmsConnection conn, String message) {
@@ -333,7 +330,7 @@ public class RtmsService {
         }
     }
 
-    private void processMediaMessage(RtmsConnection conn, String message) {
+    private void processMediaMessage(RtmsConnection conn, String mediaType, String message) {
         // log.info("[Media] Received message for session {}", conn.getSessionId());
         try {
             JsonNode msg = objectMapper.readTree(message);
@@ -343,8 +340,8 @@ public class RtmsService {
             log.debug("[Media] Full message: {}", message);
 
             switch (msgType) {
-                case 4 -> handleMediaHandshakeResponse(conn, msg);
-                case 12 -> handleMediaKeepAlive(conn, msg);
+                case 4 -> handleMediaHandshakeResponse(conn, mediaType, msg);
+                case 12 -> handleMediaKeepAlive(conn, mediaType, msg);
                 case 14 -> handleAudioData(conn, msg);
                 case 15 -> handleVideoData(conn, msg);
                 case 16 -> handleScreenShareData(conn, msg);
@@ -368,21 +365,22 @@ public class RtmsService {
         if (statusCode == 0) {
             log.info("[Signaling] Handshake OK. Status code: {} for {}", statusCode, conn.getSessionId());
 
-            // Combined media handshake should use the dedicated unified endpoint.
-            String mediaUrl = msg.path("media_server").path("server_urls").path("all").asText();
-            log.info("[Signaling] Media URL extracted: {} for {}", mediaUrl, conn.getSessionId());
-
-            if (mediaUrl.isEmpty()) {
-                log.error("[Signaling] No unified media URL (server_urls.all) received in handshake response for {}", conn.getSessionId());
-                return;
-            }
-
             conn.getSignaling().setState(RtmsConnection.SignalingConnection.SignalingState.READY);
             log.info("[Signaling] Connection state updated to 'ready' for {}", conn.getSessionId());
 
-            log.info("[Signaling] Initiating media WebSocket connection for {}", conn.getSessionId());
-            connectToMediaWebSocket(conn, mediaUrl, conn.getSessionId(), conn.getStreamId(),
-                    conn.getSignaling().getSocket(), activeConnections);
+            JsonNode serverUrls = msg.path("media_server").path("server_urls");
+            for (String configuredType : zoomConfig.getMediaTypes().split(",")) {
+                String publicType = configuredType.trim().toLowerCase();
+                String wireType = publicType.equals("screenshare") ? "deskshare" : publicType;
+                String mediaUrl = serverUrls.path(wireType).asText();
+                if (mediaUrl.isEmpty()) {
+                    log.warn("[Signaling] No server_urls.{} returned for {}", wireType, conn.getSessionId());
+                    continue;
+                }
+                connectToMediaWebSocket(conn, mediaUrl, conn.getSessionId(), conn.getStreamId(),
+                        conn.getSignaling().getSocket(), activeConnections,
+                        wireType, MEDIA_TYPES.get(publicType));
+            }
 
             subscribeToEvents(conn);
 
@@ -505,7 +503,7 @@ public class RtmsService {
         }
     }
 
-    private void handleMediaHandshakeResponse(RtmsConnection conn, JsonNode msg) {
+    private void handleMediaHandshakeResponse(RtmsConnection conn, String mediaType, JsonNode msg) {
         log.info("[Media] Processing handshake response (case 4) for {}", conn.getSessionId());
         log.info("[Media] Media handshake response: {}", msg.toString());
 
@@ -527,7 +525,7 @@ public class RtmsService {
                     log.error("[Media] ❌ ERROR: No signaling WebSocket available to send ready notification!");
                 }
 
-                conn.getMedia().setState(RtmsConnection.MediaConnection.MediaState.STREAMING);
+                conn.getMedia().get(mediaType).setState(RtmsConnection.MediaConnection.MediaState.STREAMING);
                 log.info("[Media] Connection state updated to 'streaming' for {}", conn.getSessionId());
             } catch (Exception e) {
                 log.error("[Media] Failed to send ready notification for {}: {}", conn.getSessionId(), e.getMessage());
@@ -537,8 +535,9 @@ public class RtmsService {
         }
     }
 
-    private void handleMediaKeepAlive(RtmsConnection conn, JsonNode msg) {
-        conn.getMedia().setLastKeepAlive(System.currentTimeMillis());
+    private void handleMediaKeepAlive(RtmsConnection conn, String mediaType, JsonNode msg) {
+        RtmsConnection.MediaConnection media = conn.getMedia().get(mediaType);
+        media.setLastKeepAlive(System.currentTimeMillis());
         long timestamp = msg.get("timestamp").asLong();
         log.info("[Media] Processing keep-alive request (case 12) for {}", conn.getSessionId());
         log.info("[Media] Keep-alive timestamp received: {}", timestamp);
@@ -550,8 +549,8 @@ public class RtmsService {
             log.info("[Media] Keep-alive response payload: {}", response);
 
             // Double-check: using media WebSocket for media keep-alive
-            if (conn.getMedia().getSocket() != null) {
-                conn.getMedia().getSocket().sendText(response, true);
+            if (media.getSocket() != null) {
+                media.getSocket().sendText(response, true);
                 log.info("[Media] ✅ Keep-alive response sent successfully via media WebSocket");
             } else {
                 log.error("[Media] ❌ ERROR: No media WebSocket available to send keep-alive response!");
@@ -831,11 +830,16 @@ public class RtmsService {
 
         private final RtmsConnection connection;
         private final String mediaUrl;
+        private final String mediaType;
+        private final int mediaTypeFlag;
         private final StringBuilder textAccumulator = new StringBuilder();
 
-        public MediaWebSocketListener(RtmsConnection connection, String mediaUrl) {
+        public MediaWebSocketListener(
+                RtmsConnection connection, String mediaUrl, String mediaType, int mediaTypeFlag) {
             this.connection = connection;
             this.mediaUrl = mediaUrl;
+            this.mediaType = mediaType;
+            this.mediaTypeFlag = mediaTypeFlag;
         }
 
         @Override
@@ -857,25 +861,32 @@ public class RtmsService {
                 // Media handshake with parameters (msg_type: 3)
                 RtmsMessages.DataHandshakeRequest handshakeReq = new RtmsMessages.DataHandshakeRequest(
                         3, 1, connection.getSessionId(), connection.getSessionId(),
-                        connection.getStreamId(), signature, 32, false,
+                        connection.getStreamId(), signature, mediaTypeFlag, false,
                         new RtmsMessages.MediaParams(
-                                new RtmsMessages.AudioParams(1, 1, 1, 1, 2, 20),
-                                new RtmsMessages.VideoParams(7, 3, 2, 25),
-                                new RtmsMessages.DeskshareParams(5, 2, 1),
-                                new RtmsMessages.TranscriptParams(5),
-                                new RtmsMessages.ChatParams(5)));
+                                mediaType.equals("audio")
+                                        ? new RtmsMessages.AudioParams(1, 1, 1, 1, 2, 20) : null,
+                                mediaType.equals("video")
+                                        ? new RtmsMessages.VideoParams(7, 3, 2, 25) : null,
+                                mediaType.equals("deskshare")
+                                        ? new RtmsMessages.DeskshareParams(5, 2, 1) : null,
+                                mediaType.equals("transcript")
+                                        ? new RtmsMessages.TranscriptParams(5) : null,
+                                mediaType.equals("chat")
+                                        ? new RtmsMessages.ChatParams(5) : null));
 
                 String handshakeMsg = objectMapper.writeValueAsString(handshakeReq);
                 log.info("[Media] Sending handshake for {}", connection.getSessionId());
                 log.info("[Media] Handshake payload: {}", handshakeMsg);
                 webSocket.sendText(handshakeMsg, true);
-                connection.getMedia().setState(RtmsConnection.MediaConnection.MediaState.AUTHENTICATED);
+                connection.getMedia().get(mediaType)
+                        .setState(RtmsConnection.MediaConnection.MediaState.AUTHENTICATED);
                 log.info("[Media] Connection state updated to 'authenticated' for {}", connection.getSessionId());
 
             } catch (Exception e) {
                 log.error("[Media] Error in Java WebSocket open handler for {}: {}", connection.getSessionId(),
                         e.getMessage());
-                connection.getMedia().setState(RtmsConnection.MediaConnection.MediaState.ERROR);
+                connection.getMedia().get(mediaType)
+                        .setState(RtmsConnection.MediaConnection.MediaState.ERROR);
                 webSocket.sendClose(1011, "Handshake error");
             }
         }
@@ -888,7 +899,7 @@ public class RtmsService {
             if (last) {
                 String completeMessage = textAccumulator.toString();
                 textAccumulator.setLength(0); // Clear for next message
-                processMediaMessage(connection, completeMessage);
+                processMediaMessage(connection, mediaType, completeMessage);
             }
             return null;
         }
@@ -901,7 +912,7 @@ public class RtmsService {
                 byte[] bytes = new byte[data.remaining()];
                 data.get(bytes);
                 String textMessage = new String(bytes, StandardCharsets.UTF_8);
-                processMediaMessage(connection, textMessage);
+                processMediaMessage(connection, mediaType, textMessage);
             } catch (Exception e) {
                 log.error("[Media] Failed to process binary message: {}", e.getMessage());
             }
@@ -912,7 +923,11 @@ public class RtmsService {
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             log.info("Media Java WebSocket closed for session {}: {} - {}", connection.getSessionId(), statusCode,
                     reason);
-            connection.getMedia().setState(RtmsConnection.MediaConnection.MediaState.CLOSED);
+            RtmsConnection.MediaConnection media = connection.getMedia().get(mediaType);
+            if (media != null && media.getSocket() == webSocket) {
+                media.setState(RtmsConnection.MediaConnection.MediaState.CLOSED);
+                media.setSocket(null);
+            }
 
             if (!connection.isShouldReconnect()) {
                 log.debug("Not reconnecting — RTMS was stopped.");
@@ -931,7 +946,10 @@ public class RtmsService {
                         log.info("Reconnecting media Java WebSocket in 3s...");
                         try {
                             Thread.sleep(3000);
-                            connectToMediaWebSocket(currentConn, mediaUrl);
+                            connectToMediaWebSocket(
+                                    currentConn, mediaUrl, currentConn.getSessionId(),
+                                    currentConn.getStreamId(), currentConn.getSignaling().getSocket(),
+                                    activeConnections, mediaType, mediaTypeFlag);
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         }
@@ -950,11 +968,13 @@ public class RtmsService {
         public void onError(WebSocket webSocket, Throwable error) {
             log.error("Media Java WebSocket error for session {}: {}", connection.getSessionId(), error.getMessage());
             log.error("Java Media WebSocket failure details:", error);
-            connection.getMedia().setState(RtmsConnection.MediaConnection.MediaState.ERROR);
+            RtmsConnection.MediaConnection media = connection.getMedia().get(mediaType);
+            if (media != null) media.setState(RtmsConnection.MediaConnection.MediaState.ERROR);
         }
 
         private boolean mediaHasConnection() {
-            return connection.getMedia().getSocket() != null;
+            RtmsConnection.MediaConnection media = connection.getMedia().get(mediaType);
+            return media != null && media.getSocket() != null;
         }
     }
 }

@@ -13,7 +13,8 @@ export class RTMSConfigHelper {
   static get DEFAULTS() {
     return {
       // Media settings
-      mediaTypes: 32, // Default ALL (use RTMSManager.MEDIA.* constants)
+      // Callers must explicitly select one or more concrete media types.
+      mediaTypes: null,
       
       // Legacy alias for mediaTypes (backward compatibility)
       mediaTypesFlag: null, // Will be mapped to mediaTypes if set
@@ -23,9 +24,6 @@ export class RTMSConfigHelper {
       enableGapFilling: false,
       useFiller: false,
       
-      // Media socket mode: true = single socket for all media (better sync), false = separate sockets
-      useUnifiedMediaSocket: false,
-
       // Dispatch high-volume media events outside the WebSocket parser.
       asyncMediaEvents: true,
       maxMediaEventQueueSize: 500,
@@ -215,11 +213,24 @@ export class RTMSConfigHelper {
     }
     delete normalized.mediaTypesFlag;
     
-    // Map legacy mediaSocketConnectionMode to the current boolean flag.
-    if (normalized.useUnifiedMediaSocket == null && typeof normalized.mediaSocketConnectionMode === 'string') {
-      normalized.useUnifiedMediaSocket = normalized.mediaSocketConnectionMode.toLowerCase() === 'unified';
+    if (normalized.useUnifiedMediaSocket === true ||
+        String(normalized.mediaSocketConnectionMode || '').toLowerCase() === 'unified') {
+      throw new Error(
+        'Unified RTMS media sockets and media type 32 are deprecated. ' +
+        'Select explicit mediaTypes; the library opens one split socket per media type.'
+      );
     }
+    delete normalized.useUnifiedMediaSocket;
     delete normalized.mediaSocketConnectionMode;
+
+    const mediaTypes = Number(normalized.mediaTypes);
+    if (!Number.isInteger(mediaTypes) || mediaTypes <= 0 || mediaTypes > 31) {
+      throw new Error(
+        'mediaTypes is required and must combine concrete RTMS media values: ' +
+        'audio (1), video (2), screen share (4), transcript (8), and chat (16). ' +
+        'The ALL value 32 is deprecated.'
+      );
+    }
     
     return normalized;
   }

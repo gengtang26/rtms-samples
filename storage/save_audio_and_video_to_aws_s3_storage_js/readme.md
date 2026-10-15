@@ -70,8 +70,6 @@ SSE-KMS also requires appropriate `kms:GenerateDataKey` and `kms:Decrypt` access
 | `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` | `300` | Signed-webhook replay window |
 | `RTMSTRIGGERMANAGERTYPE` | `webhook` | `webhook` or `websocket` |
 | `zoomWSURLForEvents` | empty | Zoom event WebSocket URL when using WebSocket mode |
-| `MEDIA_SOCKET_CONNECTION_MODE` | `split` | RTMS media socket mode |
-| `MEDIA_TYPES_FLAG` | `3` | Audio and video media bitmask |
 | `RECORDINGS_DIR` | `recordings` | Local media and durable queue root |
 | `FFMPEG_PATH` | `ffmpeg` | FFmpeg executable path |
 | `SHUTDOWN_TIMEOUT_MS` | `30000` | SIGINT/SIGTERM graceful-shutdown deadline |

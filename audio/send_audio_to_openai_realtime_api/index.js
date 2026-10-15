@@ -31,7 +31,6 @@ const eventSocketConfig = {
 };
 
 const rtmsConfig = {
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
   mediaTypesFlag: 1, // Audio only
   credentials: {
     meeting: {

@@ -22,23 +22,15 @@ pip install -r requirements.txt
 ZOOM_SECRET_TOKEN=your_secret_token
 ZOOM_CLIENT_ID=your_client_id
 ZOOM_CLIENT_SECRET=your_client_secret
-MEDIA_SOCKET_CONNECTION_MODE=split
-MEDIA_TYPES_FLAG=11
+RTMS_MEDIA_TYPES=audio,video,transcript
 ```
 
-`MEDIA_TYPES_FLAG` combines audio (`1`), video (`2`), screen share (`4`),
-transcript (`8`), and chat (`16`). Split mode expands the mask into separate
-media sockets, so `11` opens audio, video, and transcript sockets with handshake
-values `1`, `2`, and `8`.
+`RTMS_MEDIA_TYPES` accepts `audio`, `video`, `screenshare`, `transcript`, and
+`chat`. Each selected name opens a separate data connection.
 
-For a single unified media socket, use:
-
-```env
-MEDIA_SOCKET_CONNECTION_MODE=unified
-MEDIA_TYPES_FLAG=32
-```
-
-Unified mode requires `32`; combined masks such as `11` must use split mode.
+> Unified media socket mode and `media_type: 32` are deprecated. RTMS clients
+> must open a separate data connection for each required media type and send one
+> concrete media type per handshake.
 
 ## Running the Example
 
@@ -60,7 +52,7 @@ ngrok http 3000
 
 1. The server listens for webhook events from Zoom
 2. When RTMS starts, it establishes WebSocket connections to Zoom's signaling and media servers
-3. Split mode opens one WebSocket for each selected media type; unified mode uses `server_urls.all`
+3. It opens one WebSocket for each selected media type
 4. The audio/video/transcript msg type is printed to the console
 
 ## Notes

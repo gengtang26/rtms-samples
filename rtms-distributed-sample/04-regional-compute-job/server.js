@@ -57,7 +57,13 @@ const rtmsLogger = createRtmsObservabilityLogger({
   console: process.env.RTMS_LOG_CONSOLE !== 'false'
 });
 const { MEDIA_PARAMS } = RTMSManager;
-const VALID_MEDIA_TYPE_FLAGS = new Set([1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 16, 17, 18, 20, 24, 32]);
+const MEDIA_TYPE_FLAGS = Object.freeze({
+  audio: RTMSManager.MEDIA.AUDIO,
+  video: RTMSManager.MEDIA.VIDEO,
+  screenshare: RTMSManager.MEDIA.SHARESCREEN,
+  transcript: RTMSManager.MEDIA.TRANSCRIPT,
+  chat: RTMSManager.MEDIA.CHAT,
+});
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -394,7 +400,6 @@ async function initializeRtmsManager() {
       level: process.env.RTMS_LOG_LEVEL || 'info'
     },
     logger: rtmsLogger,
-    mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
     mediaTypes: getMediaTypesFlagFromEnv(),
     credentials: readZoomCredentials(),
     mediaParams: buildMediaParams()
@@ -533,16 +538,16 @@ function normalizeMode(value, fallback) {
 }
 
 function getMediaTypesFlagFromEnv() {
-  const rawValue = String(process.env.MEDIA_TYPES_FLAG || '32').trim();
-  const parsedValue = Number.parseInt(rawValue, 10);
-
-  if (!Number.isInteger(parsedValue) || !VALID_MEDIA_TYPE_FLAGS.has(parsedValue)) {
-    throw new Error(
-      `[regional-compute-job] Unsupported MEDIA_TYPES_FLAG: ${rawValue}. Use a valid RTMS media bitmask such as 1 (audio), 2 (video), 3 (audio+video), 9 (audio+transcript), or 32 (all).`
-    );
+  const names = String(process.env.RTMS_MEDIA_TYPES || '').split(',')
+    .map((name) => name.trim().toLowerCase()).filter(Boolean);
+  if (names.length === 0 || new Set(names).size !== names.length) {
+    throw new Error('RTMS_MEDIA_TYPES must list one or more unique media names');
   }
-
-  return parsedValue;
+  return names.reduce((flags, name) => {
+    const flag = MEDIA_TYPE_FLAGS[name];
+    if (!flag) throw new Error(`Unsupported RTMS media type: ${name}`);
+    return flags | flag;
+  }, 0);
 }
 
 function getAudioDataOptFromEnv() {

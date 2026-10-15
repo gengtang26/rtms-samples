@@ -46,8 +46,7 @@ This sample captures live audio from Zoom meetings and transcribes it using Open
 
 ```javascript
 const rtmsConfig = {
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: 1, // Audio only
+  mediaTypes: RTMSManager.MEDIA.AUDIO,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,

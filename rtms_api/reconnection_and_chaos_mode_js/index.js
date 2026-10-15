@@ -291,9 +291,12 @@ function handleSignalingMessage(conn, msg) {
     // ---------------------------------------------------------------
     case MSG_TYPE.SIGNALING_HANDSHAKE_RESP:
       if (msg.status_code === 0) {
-        // Success — extract the transcript media URL (or the "all" URL as fallback)
-        const mediaUrl = msg.media_server?.server_urls?.transcript
-                      || msg.media_server?.server_urls?.all;
+        // Success - this transcript-only sample requires the transcript URL.
+        const mediaUrl = msg.media_server?.server_urls?.transcript;
+        if (!mediaUrl) {
+          log(conn.streamId, 'SIGNALING', 'Handshake response omitted server_urls.transcript.');
+          break;
+        }
         conn.mediaUrl = mediaUrl;
         conn.reconnectAttempts = 0; // Reset backoff on successful handshake
         log(conn.streamId, 'SIGNALING', `Handshake successful. Media server URL: ${mediaUrl}`);

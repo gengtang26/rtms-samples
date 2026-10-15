@@ -17,7 +17,6 @@ TYPE_FLAGS = {
     'sharescreen': 4,
     'transcript': 8,
     'chat': 16,
-    'all': 32,
 }
 
 STATUS_TEXT = {
@@ -74,12 +73,6 @@ def _parse_chat_payload(raw_data: Any) -> Dict[str, Any]:
 
 
 def _build_media_params_for_socket(configured_media_params: Dict[str, Any], media_type: str) -> Dict[str, Any]:
-    if media_type == 'all':
-        return {
-            **configured_media_params,
-            'transcript': dict(configured_media_params['transcript']) if isinstance(configured_media_params.get('transcript'), dict) else configured_media_params.get('transcript'),
-        }
-
     media_params_key = 'deskshare' if media_type == 'sharescreen' else media_type
     if isinstance(configured_media_params.get(media_params_key), dict):
         return {media_params_key: dict(configured_media_params[media_params_key])}
@@ -235,7 +228,7 @@ async def _handle_media_messages(
                             'msg_type': 7,
                             'rtms_stream_id': stream_id,
                         }))
-                    if media_type in ('video', 'all') and conn.get('pending_event_subscription_payload') and not conn.get('event_subscriptions_sent'):
+                    if media_type == 'video' and conn.get('pending_event_subscription_payload') and not conn.get('event_subscriptions_sent'):
                         await send_deferred_event_subscriptions(conn, meeting_uuid, stream_id)
                 else:
                     FileLogger.error(

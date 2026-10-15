@@ -58,7 +58,6 @@ cp .env.example .env
 | `WEBHOOK_PATH` | `/` | Zoom webhook route |
 | `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` | `300` | Webhook replay-protection window |
 | `RTMSTRIGGERMANAGERTYPE` | `webhook` | Event source: `webhook` or `websocket` |
-| `MEDIA_SOCKET_CONNECTION_MODE` | `split` | RTMS media socket mode |
 | `AUDIO_SAMPLE_RATE` | `48000` | RTMS input rate: `8000`, `16000`, `32000`, or `48000` Hz |
 | `TARGET_CHUNK_DURATION_MS` | `100` | Source audio represented by each OpenAI append |
 | `ZOOM_S2S_CLIENT_ID` | empty | S2S credential used by shared event infrastructure when needed |

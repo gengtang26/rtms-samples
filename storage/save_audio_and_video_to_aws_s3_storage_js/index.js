@@ -65,8 +65,7 @@ if (!['webhook', 'websocket'].includes(appConfig.managerType)) {
 
 const rtmsConfig = {
   logging: { enabled: false, console: false, file: false },
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: numberConfig('MEDIA_TYPES_FLAG', 3, { integer: true, minimum: 1 }),
+  mediaTypes: RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.VIDEO,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,
@@ -111,7 +110,7 @@ const rtmsConfig = {
 console.log('[Archive] Starting RTMS S3 archiver', {
   port: appConfig.port,
   managerType: appConfig.managerType,
-  mediaTypesFlag: rtmsConfig.mediaTypesFlag
+  mediaTypes: rtmsConfig.mediaTypes
 });
 
 await fs.mkdir(recordingsDir, { recursive: true });

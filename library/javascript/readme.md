@@ -68,11 +68,14 @@ RTMSManager.MEDIA.VIDEO        // 2
 RTMSManager.MEDIA.SHARESCREEN  // 4
 RTMSManager.MEDIA.TRANSCRIPT   // 8
 RTMSManager.MEDIA.CHAT         // 16
-RTMSManager.MEDIA.ALL          // 32
 
 // Combine with bitwise OR
 const mediaTypes = RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.TRANSCRIPT;  // 9
 ```
+
+Each selected flag opens a separate data connection. Unified media socket mode
+and `media_type: 32` are deprecated; send exactly one concrete media type in
+each data handshake.
 
 ## Presets
 
@@ -85,9 +88,6 @@ await RTMSManager.init({ ...RTMSManager.PRESETS.TRANSCRIPTION, credentials });
 
 // Audio + video (recording)
 await RTMSManager.init({ ...RTMSManager.PRESETS.VIDEO_RECORDING, credentials });
-
-// All media types
-await RTMSManager.init({ ...RTMSManager.PRESETS.FULL_MEDIA, credentials });
 ```
 
 ## Events
@@ -155,7 +155,7 @@ await RTMSManager.init({
     meeting: { clientId: '...', clientSecret: '...', secretToken: '...' },
     videoSdk: { clientId: '...', clientSecret: '...', secretToken: '...' },  // Optional
   },
-  mediaTypes: RTMSManager.MEDIA.ALL,
+  mediaTypes: RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.TRANSCRIPT,
   logging: 'info',            // 'off' | 'error' | 'warn' | 'info' | 'debug'
   logDir: './logs',           // Log file directory
   enableGapFilling: false,    // Insert silence during network drops (for recording)

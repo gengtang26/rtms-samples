@@ -28,8 +28,11 @@ public class RtmsMessages {
                 @JsonProperty("server_urls") ServerUrls serverUrls
         ) {
             public record ServerUrls(
-                    String all,
-                    String audio
+                    String audio,
+                    String video,
+                    String deskshare,
+                    String transcript,
+                    String chat
             ) {}
         }
     }

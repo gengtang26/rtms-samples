@@ -41,11 +41,10 @@ This is the main reference implementation for RTMS in JavaScript. It demonstrate
 | `ZOOM_S2S_CLIENT_ID` | No | Server-to-Server OAuth Client ID |
 | `ZOOM_S2S_CLIENT_SECRET` | No | Server-to-Server OAuth Client Secret |
 | `ZOOM_ACCOUNT_ID` | No | Zoom Account ID for S2S OAuth |
-| `MEDIA_TYPES_FLAG` | No | Bitmask for media types (default: 32 = all) |
+| `RTMS_MEDIA_TYPES` | No | Comma-separated media names (default: `video`) |
 | `VIDEO_CLIENT_ID` | No | Video SDK Client ID |
 | `VIDEO_CLIENT_SECRET` | No | Video SDK Client Secret |
 | `VIDEO_SECRET_TOKEN` | No | Video SDK webhook secret token |
-| `MEDIA_SOCKET_CONNECTION_MODE` | No | Socket mode: `unified` or `split` |
 | `AUDIO_STREAM_MODE` | No | Audio mode: `mixed` or `multi` |
 | `VIDEO_STREAM_MODE` | No | Video mode: `active`, `individual`, or `speaker` |
 | `RTMSTRIGGERMANAGERTYPE` | No | Event source: `webhook` (default) or `websocket` |
@@ -67,8 +66,7 @@ const rtmsConfig = {
     logDir: path.join(__dirname, 'logs'),
     console: true
   },
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: parseInt(process.env.MEDIA_TYPES_FLAG || '32'),
+  mediaTypesFlag: getMediaTypesFlagFromEnv(),
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,
@@ -112,7 +110,7 @@ const rtmsConfig = {
 You can now switch media subscription style without editing code:
 
 ```env
-MEDIA_TYPES_FLAG=2
+RTMS_MEDIA_TYPES=video
 AUDIO_STREAM_MODE=mixed
 VIDEO_STREAM_MODE=active
 ```
@@ -128,9 +126,8 @@ Supported values:
 For individual participant video, use:
 
 ```env
-MEDIA_TYPES_FLAG=2
+RTMS_MEDIA_TYPES=video
 VIDEO_STREAM_MODE=individual
-MEDIA_SOCKET_CONNECTION_MODE=split
 ```
 
 Then the sample waits for RTMS to send a real `userId` in `participant_video_on` / `video_on_participants_changed`, logs the valid candidates, and auto-subscribes to the first available participant.
@@ -275,7 +272,7 @@ process.on('SIGINT', async () => {
 |-------|----------|
 | Webhook not received | Verify ngrok URL is set in Zoom Marketplace, check webhook path matches |
 | "Invalid signature" error | Ensure `ZOOM_CLIENT_ID` and `ZOOM_CLIENT_SECRET` match your Zoom app |
-| No media data | Check `MEDIA_TYPES_FLAG` includes video (`2`, or `3` when audio is also needed) |
+| No media data | Check `RTMS_MEDIA_TYPES` includes `video` |
 | Frontend not receiving data | Verify `FRONTEND_WSS_URL_TO_CONNECT_TO` points to your server's WebSocket |
 | Connection drops | Check network stability; RTMSManager auto-reconnects after 3 seconds |
 

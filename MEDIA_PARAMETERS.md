@@ -17,9 +17,10 @@ Specifies the format of media data transmission.
 
 `MEDIA_CONTENT_TYPE_RTP` is retained in the helper libraries only as a deprecated compatibility alias that now maps to `2`. New payloads should use `MEDIA_CONTENT_TYPE_RAW_AUDIO`.
 
-## Media Data Type (Bitmask)
+## Media Data Type
 
-Used in the `media_type` field to specify which media streams to receive. Values can be combined using bitwise OR.
+Used in the `media_type` field to specify the stream received by one data
+connection. Send exactly one concrete value per handshake.
 
 | Constant | Value | Description |
 |----------|-------|-------------|
@@ -28,9 +29,13 @@ Used in the `media_type` field to specify which media streams to receive. Values
 | `MEDIA_DATA_TYPE_DESKSHARE` | 4 | Screen share stream |
 | `MEDIA_DATA_TYPE_TRANSCRIPT` | 8 | Real-time transcript |
 | `MEDIA_DATA_TYPE_CHAT` | 16 | Chat messages |
-| `MEDIA_DATA_TYPE_ALL` | 32 | All media types |
 
-**Example**: To receive only audio and transcript: `media_type = 1 | 8` = `9`
+To receive audio and transcript, open two data connections: send
+`media_type: 1` to `server_urls.audio`, then send `media_type: 8` to
+`server_urls.transcript`.
+
+> Unified media socket mode and `media_type: 32` are deprecated. Do not combine
+> media data type values in a data handshake.
 
 ## Audio Parameters
 

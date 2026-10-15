@@ -51,8 +51,7 @@ const rtmsConfig = {
     logDir: path.join(__dirname, 'logs'),
     console: true
   },
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: 2,
+  mediaTypes: RTMSManager.MEDIA.VIDEO,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,

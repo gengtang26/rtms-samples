@@ -38,8 +38,7 @@ const websocketCredentials = {
 const rtmsConfig = {
   logging: process.env.LOG_LEVEL || 'info',
   logDir: path.join(__dirname, 'logs'),
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: parseInt(process.env.MEDIA_TYPES_FLAG || '3'),
+  mediaTypes: RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.VIDEO,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,

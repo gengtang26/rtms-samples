@@ -78,6 +78,7 @@ test('split media configuration is merged instead of overwritten', () => {
 
 test('config normalization does not mutate legacy caller credentials', () => {
   const input = {
+    mediaTypes: 1,
     credentials: {
       meeting: { clientId: 'client', zoomSecretToken: 'secret' },
       websocket: { zoomWSURLForEvents: 'wss://example.test' }
@@ -95,6 +96,25 @@ test('config normalization does not mutate legacy caller credentials', () => {
   });
 });
 
+test('config normalization requires explicit concrete media selection', () => {
+  assert.throws(
+    () => RTMSConfigHelper.normalize({}),
+    /mediaTypes is required/
+  );
+  assert.throws(
+    () => RTMSConfigHelper.normalize({ mediaTypes: 32 }),
+    /ALL value 32 is deprecated/
+  );
+  assert.equal(RTMSConfigHelper.normalize({ mediaTypes: 1 | 8 }).mediaTypes, 9);
+});
+
+test('config normalization rejects legacy unified socket options', () => {
+  assert.throws(
+    () => RTMSConfigHelper.normalize({ mediaTypes: 1, mediaSocketConnectionMode: 'unified' }),
+    /Unified RTMS media sockets/
+  );
+});
+
 test('media dispatcher bounds its queue and drops the oldest event', async () => {
   const emitted = [];
   const dispatcher = new MediaEventDispatcher({
@@ -107,7 +127,7 @@ test('media dispatcher bounds its queue and drops the oldest event', async () =>
   dispatcher.dispatch('video', 2);
   dispatcher.dispatch('video', 3);
 
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
   assert.deepEqual(emitted, [2, 3]);
   assert.equal(dispatcher.droppedEvents, 1);
 });

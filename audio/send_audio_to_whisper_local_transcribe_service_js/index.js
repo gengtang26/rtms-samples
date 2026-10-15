@@ -23,7 +23,6 @@ const appConfig = {
 };
 
 const rtmsConfig = {
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
   mediaTypesFlag: 1,
   credentials: {
     meeting: {

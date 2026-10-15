@@ -45,7 +45,7 @@ function testMediaInterruptionEmitsDedicatedEvent() {
       config: {}
     },
     (name, event) => events.push({ name, event }),
-    32,
+    1,
     'client-id',
     'client-secret'
   );

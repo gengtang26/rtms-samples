@@ -58,7 +58,6 @@ const rtmsConfig = {
     file: false
   },
   mediaTypes: RTMSManager.MEDIA.CHAT,
-  useUnifiedMediaSocket: process.env.MEDIA_SOCKET_CONNECTION_MODE === 'unified',
   credentials: {
     meeting: {
       clientId: requireEnvironmentVariable('ZOOM_CLIENT_ID'),

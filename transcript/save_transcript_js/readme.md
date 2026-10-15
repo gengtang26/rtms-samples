@@ -33,7 +33,6 @@ Configure the Marketplace webhook endpoint as your public base URL plus `WEBHOOK
 | `PORT` | `3000` | HTTP server port |
 | `WEBHOOK_PATH` | `/webhook` | Zoom webhook route |
 | `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` | `300` | Maximum age of a signed webhook |
-| `MEDIA_SOCKET_CONNECTION_MODE` | `split` | RTMS media socket mode |
 | `TRANSCRIPT_OUTPUT_DIR` | `recordings` | Output directory, resolved from this sample folder |
 | `TRANSCRIPT_RETENTION_DAYS` | `30` | Delete inactive stream folders older than this; `0` disables deletion |
 | `TRANSCRIPT_CLEANUP_INTERVAL_HOURS` | `6` | Cleanup frequency; `0` disables scheduled cleanup |

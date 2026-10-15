@@ -66,7 +66,7 @@ export function handleMediaMessage(data, {
             conn.media[mediaType].state = 'streaming';
           }
 
-          if ((mediaType === 'video' || mediaType === 'all') && conn.pendingEventSubscriptionPayload && !conn.eventSubscriptionsSent) {
+          if (mediaType === 'video' && conn.pendingEventSubscriptionPayload && !conn.eventSubscriptionsSent) {
             sendDeferredEventSubscriptions(conn, signalingSocket, meetingUuid, streamId);
           }
         } else {

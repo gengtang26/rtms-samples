@@ -60,8 +60,7 @@ The compute pod does not need to know whether final storage is local disk, MinIO
 
 | Key | Purpose |
 |-----|---------|
-| `MEDIA_TYPES_FLAG` | `32` for all media, `3` audio+video, `9` audio+transcript |
-| `MEDIA_SOCKET_CONNECTION_MODE` | RTMS media socket mode, default `split` |
+| `RTMS_MEDIA_TYPES` | Required names such as `audio,video,transcript`; one socket per name |
 | `AUDIO_STREAM_MODE` | `mixed` by default |
 | `VIDEO_STREAM_MODE` | `active` by default |
 | `LEASE_TTL_MS` | Lease expiry, default `45000` |

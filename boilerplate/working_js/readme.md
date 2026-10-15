@@ -41,11 +41,10 @@ This is the main reference implementation for RTMS in JavaScript. It demonstrate
 | `ZOOM_S2S_CLIENT_ID` | No | Server-to-Server OAuth Client ID |
 | `ZOOM_S2S_CLIENT_SECRET` | No | Server-to-Server OAuth Client Secret |
 | `ZOOM_ACCOUNT_ID` | No | Zoom Account ID for S2S OAuth |
-| `MEDIA_TYPES_FLAG` | No | Media mask: audio `1`, video `2`, screen share `4`, transcript `8`, chat `16`, or `32` for all |
+| `RTMS_MEDIA_TYPES` | Yes | Comma-separated media names: `audio`, `video`, `screenshare`, `transcript`, `chat` |
 | `VIDEO_CLIENT_ID` | No | Video SDK Client ID |
 | `VIDEO_CLIENT_SECRET` | No | Video SDK Client Secret |
 | `VIDEO_SECRET_TOKEN` | No | Video SDK webhook secret token |
-| `MEDIA_SOCKET_CONNECTION_MODE` | No | `split` expands selected bits into separate sockets; `unified` uses one `all` socket and should use media flag `32` |
 | `AUDIO_STREAM_MODE` | No | Audio mode: `mixed` or `multi` |
 | `VIDEO_STREAM_MODE` | No | Video mode: `active`, `individual`, or `speaker` |
 | `DEFAULT_VIDEO_SUBSCRIPTION_USER_ID` | No | Auto-subscribe this user ID when `VIDEO_STREAM_MODE=individual` and that participant's camera is on |
@@ -68,8 +67,7 @@ const rtmsConfig = {
     logDir: path.join(__dirname, 'logs'),
     console: true
   },
-  mediaSocketConnectionMode,
-  mediaTypesFlag,
+  mediaTypes: getMediaTypesFlagFromEnv(),
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,
@@ -113,7 +111,7 @@ const rtmsConfig = {
 You can now switch media subscription style without editing code:
 
 ```env
-MEDIA_TYPES_FLAG=32
+RTMS_MEDIA_TYPES=audio,video,transcript
 AUDIO_STREAM_MODE=mixed
 VIDEO_STREAM_MODE=active
 ```
@@ -129,31 +127,23 @@ Supported values:
 For individual participant video, use:
 
 ```env
-MEDIA_TYPES_FLAG=2
+RTMS_MEDIA_TYPES=video
 VIDEO_STREAM_MODE=individual
-MEDIA_SOCKET_CONNECTION_MODE=split
 DEFAULT_VIDEO_SUBSCRIPTION_USER_ID=16778240
 ```
 
-For audio, video, and transcript over separate media sockets, use:
+For audio, video, and transcript, use:
 
 ```env
-MEDIA_TYPES_FLAG=11
-MEDIA_SOCKET_CONNECTION_MODE=split
+RTMS_MEDIA_TYPES=audio,video,transcript
 ```
 
-In split mode, RTMSManager expands `11` into independent handshakes with
-`media_type` values `1`, `2`, and `8`; it does not send `11` to a media socket.
+RTMSManager opens independent sockets whose handshakes use `media_type` values
+`1`, `2`, and `8`.
 
-For one unified socket, use:
-
-```env
-MEDIA_TYPES_FLAG=32
-MEDIA_SOCKET_CONNECTION_MODE=unified
-```
-
-Do not use a combined mask such as `11` in unified mode because it is sent as one
-media handshake value; use split mode to expand that mask instead.
+> Unified media socket mode and `media_type: 32` are deprecated. RTMS clients
+> must open a separate data connection for each required media type and send one
+> concrete media type per handshake.
 
 Then the sample will automatically subscribe to that user when they appear in `participant_video_on` / `video_on_participants_changed`.
 
@@ -296,7 +286,7 @@ process.on('SIGINT', async () => {
 |-------|----------|
 | Webhook not received | Verify ngrok URL is set in Zoom Marketplace, check webhook path matches |
 | "Invalid signature" error | Ensure `ZOOM_CLIENT_ID` and `ZOOM_CLIENT_SECRET` match your Zoom app |
-| No media data | Check `MEDIA_TYPES_FLAG` includes desired media types (32 = all) |
+| No media data | Check `RTMS_MEDIA_TYPES` lists the required media names |
 | Frontend not receiving data | Verify `FRONTEND_WSS_URL_TO_CONNECT_TO` points to your server's WebSocket |
 | Connection drops | Check network stability; RTMSManager auto-reconnects after 3 seconds |
 

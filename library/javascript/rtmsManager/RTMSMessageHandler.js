@@ -60,7 +60,7 @@ export class RTMSMessageHandler {
    * @param {string} rtmsType - Product type (meeting, webinar, videoSdk, etc.)
    * @param {number|null} startTime - Start timestamp from webhook
    */
-  constructor(rtmsId, streamId, serverUrls, clientId, clientSecret, emit, mediaTypesFlag = 32, config = {}, rtmsType = 'meeting', startTime = null) {
+  constructor(rtmsId, streamId, serverUrls, clientId, clientSecret, emit, mediaTypesFlag, config = {}, rtmsType = 'meeting', startTime = null) {
     this.rtmsId = rtmsId;
     this.rtmsType = rtmsType;
     this.streamId = streamId;
@@ -310,7 +310,7 @@ export class RTMSMessageHandler {
   }
 
   isIndividualVideoSubscriptionEnabled() {
-    const requestedVideo = this.mediaTypesFlag === 32 || Boolean(this.mediaTypesFlag & 2);
+    const requestedVideo = Boolean(this.mediaTypesFlag & 2);
     const dataOpt = this.config?.mediaParams?.video?.data_opt;
     return requestedVideo && dataOpt === this.protocolDefinitions.mediaDataOptions.VIDEO_SINGLE_INDIVIDUAL_STREAM;
   }

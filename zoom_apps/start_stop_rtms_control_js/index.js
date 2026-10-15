@@ -34,7 +34,12 @@ const config = {
 const rtmsConfig = {
   logging: 'info',
   logDir: path.join(__dirname, 'logs'),
-  mediaTypes: RTMSManager.MEDIA.ALL,
+  mediaTypes:
+    RTMSManager.MEDIA.AUDIO |
+    RTMSManager.MEDIA.VIDEO |
+    RTMSManager.MEDIA.SHARESCREEN |
+    RTMSManager.MEDIA.TRANSCRIPT |
+    RTMSManager.MEDIA.CHAT,
   credentials: {
     meeting: {
       clientId: config.clientId,

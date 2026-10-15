@@ -31,8 +31,6 @@ export interface MediaTypes {
   TRANSCRIPT: 8;
   /** Chat messages (16) */
   CHAT: 16;
-  /** All media types (32) */
-  ALL: 32;
 }
 
 // =============================================================================
@@ -216,8 +214,8 @@ export interface RTMSConfig {
   credentials?: CredentialsConfig;
   
   // Media settings
-  /** Media types to subscribe (use RTMSManager.MEDIA.*) */
-  mediaTypes?: number;
+  /** Required explicit media types to subscribe (use RTMSManager.MEDIA.*) */
+  mediaTypes: number;
   /** @deprecated Use mediaTypes instead */
   mediaTypesFlag?: number;
   
@@ -244,8 +242,6 @@ export interface RTMSConfig {
   // Media parameters (advanced)
   /** Media encoding/format parameters */
   mediaParams?: MediaParams;
-  /** Prefer one media socket when Zoom provides an `all` endpoint */
-  useUnifiedMediaSocket?: boolean;
   /** Dispatch audio/video/screen-share events through a bounded asynchronous queue */
   asyncMediaEvents?: boolean;
   /** Maximum number of queued media events before the oldest event is dropped */
@@ -636,8 +632,6 @@ export interface Presets {
   TRANSCRIPTION: Preset;
   /** Video recording - audio + video */
   VIDEO_RECORDING: Preset;
-  /** Full media - all types (default) */
-  FULL_MEDIA: Preset;
 }
 
 // =============================================================================

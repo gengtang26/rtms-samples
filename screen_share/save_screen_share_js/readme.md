@@ -46,8 +46,7 @@ const rtmsConfig = {
     logDir: path.join(__dirname, 'logs'),
     console: true
   },
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: 4,
+  mediaTypes: RTMSManager.MEDIA.SCREEN_SHARE,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,

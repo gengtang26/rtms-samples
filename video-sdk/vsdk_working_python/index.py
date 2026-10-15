@@ -153,7 +153,6 @@ def connect_to_signaling_ws(session_id, stream_id, server_url):
             if msg.get("msg_type") == 2 and msg.get("status_code") == 0:
                 with stream_lock:
                     signaling_handshakes_in_flight.discard(stream_id)
-                # media_url = msg.get("media_server", {}).get("server_urls", {}).get("all")
                 media_url = msg.get("media_server", {}).get("server_urls", {}).get("audio")
                 if media_url:
                     connect_to_media_ws(media_url, session_id, stream_id, ws)
