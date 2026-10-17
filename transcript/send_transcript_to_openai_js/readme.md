@@ -42,7 +42,6 @@ Set the Zoom webhook endpoint to your public URL plus `WEBHOOK_PATH`, for exampl
 | `PORT` | `3000` | HTTP server port |
 | `WEBHOOK_PATH` | `/webhook` | Zoom webhook route |
 | `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` | `300` | Maximum signed-webhook timestamp age |
-| `MEDIA_SOCKET_CONNECTION_MODE` | `split` | RTMS media socket mode |
 
 Provider pricing changes independently of this sample. If `OPENAI_MODEL` changes, update both cost variables using the current [OpenAI API pricing](https://openai.com/api/pricing/) so the local spend estimate remains meaningful. Provider-side quotas and billing limits remain authoritative.
 

@@ -94,7 +94,7 @@ sequenceDiagram
     
     alt Signature Valid
         Sig-->>Server: { msg_type: 2, status_code: 0, media_server: {...} }
-        Note over Server: Success! Extract media_server.server_urls.all
+        Note over Server: Extract one URL for each required media type
     else Signature Invalid
         Sig-->>Server: { msg_type: 2, status_code: 4xx }
         Note over Server: Auth failed - check credentials
@@ -107,25 +107,28 @@ sequenceDiagram
 sequenceDiagram
     participant Server as Your Server
     participant Sig as Signaling WSS
-    participant Media as Media WSS
+    participant Audio as Audio WSS
+    participant Video as Video WSS
 
     Note over Server: Already connected to Signaling
 
-    Server->>Media: WebSocket connect(media_url)
-    Server->>Media: JSON { msg_type: 3, media_type: 32, media_params: {...} }
+    Server->>Audio: WebSocket connect(server_urls.audio)
+    Server->>Audio: JSON { msg_type: 3, media_type: 1, media_params: { audio: {...} } }
+    Server->>Video: WebSocket connect(server_urls.video)
+    Server->>Video: JSON { msg_type: 3, media_type: 2, media_params: { video: {...} } }
     
     alt Handshake Success
-        Media-->>Server: { msg_type: 4, status_code: 0 }
+        Audio-->>Server: { msg_type: 4, status_code: 0 }
+        Video-->>Server: { msg_type: 4, status_code: 0 }
         Server->>Sig: { msg_type: 7, rtms_stream_id }
-        Note over Media: Streaming starts
+        Note over Audio,Video: Streaming starts
         
         loop Continuous Stream
-            Media-->>Server: Audio (msg_type: 14, content: base64)
-            Media-->>Server: Video (msg_type: 15, content: base64)
-            Media-->>Server: Transcript (msg_type: 17, content: text)
+            Audio-->>Server: Audio (msg_type: 14, content: base64)
+            Video-->>Server: Video (msg_type: 15, content: base64)
         end
     else Handshake Failed
-        Media-->>Server: { msg_type: 4, status_code: 4xx }
+        Audio-->>Server: { msg_type: 4, status_code: 4xx }
         Note over Server: Check media_params configuration
     end
 ```

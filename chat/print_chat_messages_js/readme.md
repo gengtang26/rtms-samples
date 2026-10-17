@@ -51,7 +51,6 @@ ZOOM_SECRET_TOKEN=your_zoom_webhook_secret_token
 
 PORT=3000
 WEBHOOK_PATH=/webhook
-MEDIA_SOCKET_CONNECTION_MODE=split
 RTMS_LOG_LEVEL=info
 PRINT_FULL_CHAT_PAYLOAD=false
 ```

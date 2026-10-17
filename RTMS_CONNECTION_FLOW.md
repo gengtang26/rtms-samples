@@ -378,9 +378,15 @@ func connectToSignaling(meetingUUID, streamID, serverURL string) {
 
 ---
 
-### 4. Receive Media Server URL
+### 4. Receive Media Server URLs
 
-On successful handshake (`msg_type: 2`, `status_code: 0`), extract the media server URL:
+> **Deprecated:** Do not use unified media socket mode or `media_type: 32`.
+> Open a separate data connection for each required media type and send one
+> concrete value per handshake: audio (`1`), video (`2`), screen share (`4`),
+> transcript (`8`), or chat (`16`).
+
+On successful handshake (`msg_type: 2`, `status_code: 0`), extract the URL for
+each media type your application explicitly selected:
 
 ```json
 {
@@ -388,7 +394,9 @@ On successful handshake (`msg_type: 2`, `status_code: 0`), extract the media ser
   "status_code": 0,
   "media_server": {
     "server_urls": {
-      "all": "wss://rtms-media-sjc.zoom.us/media"
+      "audio": "wss://rtms-media-sjc.zoom.us/audio",
+      "video": "wss://rtms-media-sjc.zoom.us/video",
+      "transcript": "wss://rtms-media-sjc.zoom.us/transcript"
     }
   }
 }
@@ -401,7 +409,7 @@ function handleSignalingMessage(msg, signalingWs, meetingUuid, streamId) {
   switch (msg.msg_type) {
     case 2: // SIGNALING_HANDSHAKE_RESP
       if (msg.status_code === 0) {
-        const mediaUrl = msg.media_server.server_urls.all;
+        const mediaUrl = msg.media_server.server_urls.audio;
         connectToMedia(mediaUrl, signalingWs, meetingUuid, streamId);
       } else {
         console.error('Signaling handshake failed:', msg.status_code);
@@ -426,7 +434,7 @@ def on_signaling_message(ws, message, meeting_uuid, stream_id):
     
     if msg['msg_type'] == 2:  # SIGNALING_HANDSHAKE_RESP
         if msg['status_code'] == 0:
-            media_url = msg['media_server']['server_urls']['all']
+            media_url = msg['media_server']['server_urls']['audio']
             connect_to_media(media_url, ws, meeting_uuid, stream_id)
         else:
             print(f"Signaling handshake failed: {msg['status_code']}")
@@ -446,7 +454,7 @@ type SignalingResponse struct {
     StatusCode  int `json:"status_code"`
     MediaServer struct {
         ServerURLs struct {
-            All string `json:"all"`
+            Audio string `json:"audio"`
         } `json:"server_urls"`
     } `json:"media_server"`
     Timestamp int64 `json:"timestamp"`
@@ -459,7 +467,7 @@ func handleSignalingMessage(conn *websocket.Conn, data []byte, meetingUUID, stre
     switch msg.MsgType {
     case 2: // SIGNALING_HANDSHAKE_RESP
         if msg.StatusCode == 0 {
-            mediaURL := msg.MediaServer.ServerURLs.All
+            mediaURL := msg.MediaServer.ServerURLs.Audio
             go connectToMedia(mediaURL, conn, meetingUUID, streamID)
         }
     
@@ -476,7 +484,9 @@ func handleSignalingMessage(conn *websocket.Conn, data []byte, meetingUUID, stre
 
 ### 5. Connect to Media WebSocket
 
-Connect to media server and send handshake with media configuration:
+Connect to each selected media server and send a handshake containing exactly
+one concrete media type. This complete example requests audio; repeat it with
+the matching URL, type, and parameters for other selected media.
 
 ```json
 {
@@ -485,7 +495,7 @@ Connect to media server and send handshake with media configuration:
   "meeting_uuid": "<meeting_uuid>",
   "rtms_stream_id": "<stream_id>",
   "signature": "<hmac_sha256_signature>",
-  "media_type": 32,
+  "media_type": 1,
   "payload_encryption": false,
   "media_params": {
     "audio": {
@@ -495,12 +505,6 @@ Connect to media server and send handshake with media configuration:
       "codec": 1,
       "data_opt": 1,
       "send_rate": 100
-    },
-    "video": {
-      "content_type": 3,
-      "codec": 7,
-      "resolution": 2,
-      "fps": 25
     }
   }
 }
@@ -528,7 +532,7 @@ function connectToMedia(mediaUrl, signalingWs, meetingUuid, streamId) {
       meeting_uuid: meetingUuid,
       rtms_stream_id: streamId,
       signature: signature,
-      media_type: 32, // All media types
+      media_type: 1, // Audio
       payload_encryption: false,
       media_params: {
         audio: {
@@ -538,12 +542,6 @@ function connectToMedia(mediaUrl, signalingWs, meetingUuid, streamId) {
           codec: 1,        // L16
           data_opt: 1,     // AUDIO_MIXED_STREAM
           send_rate: 100   // 100ms chunks
-        },
-        video: {
-          content_type: 3, // RAW_VIDEO
-          codec: 7,        // H264
-          resolution: 2,   // 720p
-          fps: 25
         }
       }
     };
@@ -580,7 +578,7 @@ def connect_to_media(media_url, signaling_ws, meeting_uuid, stream_id):
             "meeting_uuid": meeting_uuid,
             "rtms_stream_id": stream_id,
             "signature": signature,
-            "media_type": 32,  # All media types
+            "media_type": 1,  # Audio
             "payload_encryption": False,
             "media_params": {
                 "audio": {
@@ -590,12 +588,6 @@ def connect_to_media(media_url, signaling_ws, meeting_uuid, stream_id):
                     "codec": 1,         # L16
                     "data_opt": 1,      # AUDIO_MIXED_STREAM
                     "send_rate": 100    # 100ms chunks
-                },
-                "video": {
-                    "content_type": 3,  # RAW_VIDEO
-                    "codec": 7,         # H264
-                    "resolution": 2,    # 720p
-                    "fps": 25
                 }
             }
         }
@@ -637,7 +629,7 @@ func connectToMedia(mediaURL string, signalingConn *websocket.Conn, meetingUUID,
         "meeting_uuid":       meetingUUID,
         "rtms_stream_id":     streamID,
         "signature":          signature,
-        "media_type":         32, // All media types
+        "media_type":         1, // Audio
         "payload_encryption": false,
         "media_params": map[string]interface{}{
             "audio": map[string]interface{}{
@@ -647,12 +639,6 @@ func connectToMedia(mediaURL string, signalingConn *websocket.Conn, meetingUUID,
                 "codec":        1,   // L16
                 "data_opt":     1,   // AUDIO_MIXED_STREAM
                 "send_rate":    100, // 100ms chunks
-            },
-            "video": map[string]interface{}{
-                "content_type": 3,  // RAW_VIDEO
-                "codec":      7,  // H264
-                "resolution": 2,  // 720p
-                "fps":        25,
             },
         },
     }
@@ -1057,20 +1043,20 @@ func cleanup(meetingUUID string) {
 | 17 | MEDIA_DATA_TRANSCRIPT | Server → Client | Transcript text |
 | 18 | MEDIA_DATA_CHAT | Server → Client | Chat message |
 
-## Media Type Flags
+## Media Type Values
 
-The `media_type` field is a bitmask:
+The `media_type` field identifies one concrete type for one data connection:
 
 | Flag | Value | Description |
 |------|-------|-------------|
 | Audio | 1 | Receive audio streams |
 | Video | 2 | Receive video streams |
 | Screen Share | 4 | Receive screen share |
-| Chat | 8 | Receive chat messages |
-| Transcript | 16 | Receive transcripts |
-| **All** | **32** | Receive all media types |
+| Transcript | 8 | Receive transcripts |
+| Chat | 16 | Receive chat messages |
 
-Combine flags: `audio + video + transcript = 1 + 2 + 16 = 19`
+Do not combine these values in a data handshake. Open one data connection per
+required type.
 
 ## Media Parameters Reference
 
@@ -1156,7 +1142,7 @@ function connectToSignaling(meetingUuid, streamId, serverUrl) {
     const msg = JSON.parse(data);
     
     if (msg.msg_type === 2 && msg.status_code === 0) {
-      connectToMedia(msg.media_server.server_urls.all, meetingUuid, streamId);
+      connectToMedia(msg.media_server.server_urls.audio, meetingUuid, streamId);
     } else if (msg.msg_type === 12) {
       signalingWs.send(JSON.stringify({ msg_type: 13, timestamp: msg.timestamp }));
     }
@@ -1173,11 +1159,10 @@ function connectToMedia(mediaUrl, meetingUuid, streamId) {
       meeting_uuid: meetingUuid,
       rtms_stream_id: streamId,
       signature: generateSignature(meetingUuid, streamId),
-      media_type: 32,
+      media_type: 1,
       payload_encryption: false,
       media_params: {
-        audio: { content_type: 2, sample_rate: 1, channel: 1, codec: 1, data_opt: 1, send_rate: 100 },
-        video: { content_type: 3, codec: 7, resolution: 2, fps: 25 }
+        audio: { content_type: 2, sample_rate: 1, channel: 1, codec: 1, data_opt: 1, send_rate: 100 }
       }
     }));
   });

@@ -13,15 +13,6 @@ const TYPE_FLAGS = {
 };
 
 function buildMediaParamsForSocket(configuredMediaParams, mediaType) {
-  if (mediaType === 'all') {
-    return {
-      ...configuredMediaParams,
-      transcript: configuredMediaParams.transcript
-        ? { ...configuredMediaParams.transcript }
-        : undefined
-    };
-  }
-
   const paramsBySocketType = {};
   const mediaParamsKey = mediaType === 'sharescreen' ? 'deskshare' : mediaType;
   if (configuredMediaParams?.[mediaParamsKey]) {
@@ -32,7 +23,6 @@ function buildMediaParamsForSocket(configuredMediaParams, mediaType) {
 }
 
 export function mergeMediaConfig(currentConfig, mediaParams, mediaType) {
-  if (mediaType === 'all') return { ...mediaParams };
   return { ...(currentConfig || {}), ...mediaParams };
 }
 

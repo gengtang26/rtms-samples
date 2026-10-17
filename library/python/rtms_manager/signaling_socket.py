@@ -61,7 +61,7 @@ async def _close_socket_quietly(ws: Optional[WebSocketClientProtocol]):
 
 def _is_individual_video_enabled(conn: Dict[str, Any], media_types_flag: int) -> bool:
     protocol = _get_protocol(conn)
-    requested_video = media_types_flag == 32 or bool(media_types_flag & 2)
+    requested_video = bool(media_types_flag & 2)
     video_data_opt = conn.get('config', {}).get('media_params', {}).get('video', {}).get('data_opt')
     return requested_video and video_data_opt == protocol.media_data_options.VIDEO_SINGLE_INDIVIDUAL_STREAM
 
@@ -80,7 +80,7 @@ def _build_event_subscription_payload(conn: Dict[str, Any], media_types_flag: in
             {'event_type': protocol.event_types.PARTICIPANT_VIDEO_ON, 'subscribe': True},
             {'event_type': protocol.event_types.PARTICIPANT_VIDEO_OFF, 'subscribe': True},
         ])
-    if media_types_flag == 32 or bool(media_types_flag & 16):
+    if bool(media_types_flag & 16):
         events.extend([
             {'event_type': protocol.event_types.CHAT_GROUP_CREATE, 'subscribe': True},
             {'event_type': protocol.event_types.CHAT_GROUP_DELETE, 'subscribe': True},
@@ -166,7 +166,7 @@ async def connect_to_signaling_websocket(
     client_id: str,
     client_secret: str,
     emit: Callable,
-    media_types_flag: int = 32,
+    media_types_flag: int,
     on_media_url_received: Optional[Callable] = None
 ) -> Optional[WebSocketClientProtocol]:
     rtms_type = conn.get('rtms_type', 'meeting')

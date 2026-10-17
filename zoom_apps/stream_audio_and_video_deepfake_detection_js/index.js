@@ -20,7 +20,13 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const { MEDIA_PARAMS } = RTMSManager;
 
-const VALID_MEDIA_TYPE_FLAGS = new Set([1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 16, 17, 18, 20, 24, 32]);
+const MEDIA_TYPE_FLAGS = Object.freeze({
+  audio: RTMSManager.MEDIA.AUDIO,
+  video: RTMSManager.MEDIA.VIDEO,
+  screenshare: RTMSManager.MEDIA.SHARESCREEN,
+  transcript: RTMSManager.MEDIA.TRANSCRIPT,
+  chat: RTMSManager.MEDIA.CHAT,
+});
 
 const state = {
   activeStreamId: null,
@@ -114,16 +120,18 @@ function getAudioDeepfakeClipSeconds() {
 }
 
 function getMediaTypesFlagFromEnv() {
-  const rawValue = String(process.env.MEDIA_TYPES_FLAG || '3').trim();
-  const parsedValue = Number.parseInt(rawValue, 10);
-
-  if (!Number.isInteger(parsedValue) || !VALID_MEDIA_TYPE_FLAGS.has(parsedValue)) {
-    throw new Error(
-      `Unsupported MEDIA_TYPES_FLAG: ${rawValue}. Use a valid RTMS media bitmask such as 1, 2, 3, 9, or 32.`
-    );
+  const names = String(process.env.RTMS_MEDIA_TYPES || 'audio,video')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  if (names.length === 0 || new Set(names).size !== names.length) {
+    throw new Error('RTMS_MEDIA_TYPES must contain unique media names');
   }
-
-  return parsedValue;
+  return names.reduce((flags, name) => {
+    const flag = MEDIA_TYPE_FLAGS[name];
+    if (!flag) throw new Error(`Unsupported RTMS media type: ${name}`);
+    return flags | flag;
+  }, 0);
 }
 
 function validateRequiredEnv(names) {
@@ -140,12 +148,12 @@ function validateServiceApiKey({ mode, apiKey, envName, serviceName }) {
 }
 
 function includesMedia(mediaTypesFlag, mediaType) {
-  return mediaTypesFlag === RTMSManager.MEDIA.ALL || Boolean(mediaTypesFlag & mediaType);
+  return Boolean(mediaTypesFlag & mediaType);
 }
 
 function validateRuntimeConfig({ mediaTypesFlag, videoMode, audioMode, hlsEnabled }) {
   if (!includesMedia(mediaTypesFlag, RTMSManager.MEDIA.VIDEO)) {
-    throw new Error('This sample requires video media. Set MEDIA_TYPES_FLAG to include video, for example 2 or 3.');
+    throw new Error('This sample requires video media. Add video to RTMS_MEDIA_TYPES.');
   }
 
   if (videoMode !== 'individual' && videoMode !== 'single_individual') {
@@ -153,7 +161,7 @@ function validateRuntimeConfig({ mediaTypesFlag, videoMode, audioMode, hlsEnable
   }
 
   if (hlsEnabled && !includesMedia(mediaTypesFlag, RTMSManager.MEDIA.AUDIO)) {
-    throw new Error('HLS preview currently muxes video with RTMS audio. Set MEDIA_TYPES_FLAG=3 or disable HLS with ENABLE_HLS_PREVIEW=false.');
+    throw new Error('HLS preview currently muxes video with RTMS audio. Add audio to RTMS_MEDIA_TYPES or set ENABLE_HLS_PREVIEW=false.');
   }
 
   if (audioMode !== 'multi' && audioMode !== 'multiple') {
@@ -629,7 +637,6 @@ const rtmsConfig = {
     logDir: path.join(__dirname, 'logs'),
     console: process.env.LOG_LEVEL !== 'off'
   },
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
   mediaTypesFlag,
   credentials: {
     meeting: {

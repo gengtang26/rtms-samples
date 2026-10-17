@@ -396,8 +396,7 @@ ZOOM_CLIENT_ID=
 ZOOM_CLIENT_SECRET=
 ZOOM_SECRET_TOKEN=
 
-MEDIA_SOCKET_CONNECTION_MODE=split
-MEDIA_TYPES_FLAG=3
+RTMS_MEDIA_TYPES=audio,video
 VIDEO_STREAM_MODE=individual
 AUDIO_STREAM_MODE=multi
 ALLOW_MANUAL_RTMS_USER_ID=false
@@ -583,10 +582,10 @@ DEEPFAKE_MODE=off
 The sample follows the same startup style as `boilerplate/working_js` and adds a few demo-specific checks:
 
 - Fails fast if `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, or `ZOOM_SECRET_TOKEN` are missing.
-- Fails fast if `MEDIA_TYPES_FLAG` does not include video.
+- Fails fast if `RTMS_MEDIA_TYPES` does not include video.
 - Fails fast if `VIDEO_STREAM_MODE` is not `individual`, because this sample is specifically for individual video.
 - Fails fast if `AUDIO_STREAM_MODE` is not `multi`, because this sample verifies selected-user audio from RTMS multi-stream packets.
-- Requires audio in `MEDIA_TYPES_FLAG` when HLS preview is enabled, because the ffmpeg HLS pipeline muxes video with RTMS audio.
+- Requires audio in `RTMS_MEDIA_TYPES` when HLS preview is enabled, because the ffmpeg HLS pipeline muxes video with RTMS audio.
 - Blocks manual subscription to arbitrary RTMS user IDs unless that user is present in the video-on list. For testing only, set `ALLOW_MANUAL_RTMS_USER_ID=true`.
 - Disables duplicate Start/Stop button clicks while a Zoom Apps SDK RTMS control call is in progress.
 - Keeps the Start/Stop RTMS buttons disabled until the Zoom Apps SDK script has loaded and `getSupportedJsApis()` confirms those APIs are available.

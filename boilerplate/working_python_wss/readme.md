@@ -22,7 +22,15 @@ pip install -r requirements.txt
 ZOOM_SECRET_TOKEN=your_secret_token
 ZOOM_CLIENT_ID=your_client_id
 ZOOM_CLIENT_SECRET=your_client_secret
+RTMS_MEDIA_TYPES=audio,video,transcript
 ```
+
+`RTMS_MEDIA_TYPES` accepts `audio`, `video`, `screenshare`, `transcript`, and
+`chat`. Each selected name opens a separate data connection.
+
+> Unified media socket mode and `media_type: 32` are deprecated. RTMS clients
+> must open a separate data connection for each required media type and send one
+> concrete media type per handshake.
 
 ## Running the Example
 
@@ -44,7 +52,7 @@ ngrok http 3000
 
 1. The server listens for webhook events from Zoom
 2. When RTMS starts, it establishes WebSocket connections to Zoom's signaling and media servers
-3. Audio, Video and Transcript data is received through the media WebSocket connection
+3. Audio, video, and transcript data is received through separate media WebSocket connections
 4. The audio/video/transcript msg type is printed to the console
 
 ## Notes

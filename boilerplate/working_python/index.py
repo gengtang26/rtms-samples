@@ -22,10 +22,6 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG")
 ZOOM_SECRET_TOKEN = os.getenv("ZOOM_SECRET_TOKEN")
 CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
-MEDIA_TYPES_FLAG = int(os.getenv("MEDIA_TYPES_FLAG", "11"))
-MEDIA_SOCKET_CONNECTION_MODE = os.getenv("MEDIA_SOCKET_CONNECTION_MODE", "split").strip().lower()
-
-ALL_INDIVIDUAL_MEDIA_FLAGS = 1 | 2 | 4 | 8 | 16
 MEDIA_DEFINITIONS = {
     "audio": 1,
     "video": 2,
@@ -33,15 +29,15 @@ MEDIA_DEFINITIONS = {
     "transcript": 8,
     "chat": 16,
 }
-
-if MEDIA_TYPES_FLAG != 32 and (
-    MEDIA_TYPES_FLAG <= 0 or MEDIA_TYPES_FLAG & ~ALL_INDIVIDUAL_MEDIA_FLAGS
-):
-    raise ValueError("MEDIA_TYPES_FLAG must combine 1, 2, 4, 8, and 16, or be 32")
-if MEDIA_SOCKET_CONNECTION_MODE not in {"split", "unified"}:
-    raise ValueError("MEDIA_SOCKET_CONNECTION_MODE must be split or unified")
-if MEDIA_SOCKET_CONNECTION_MODE == "unified" and MEDIA_TYPES_FLAG != 32:
-    raise ValueError("Unified mode requires MEDIA_TYPES_FLAG=32")
+PUBLIC_MEDIA_NAMES = {**MEDIA_DEFINITIONS, "screenshare": MEDIA_DEFINITIONS["deskshare"]}
+PUBLIC_MEDIA_NAMES.pop("deskshare")
+MEDIA_TYPE_NAMES = [name.strip().lower() for name in os.getenv("RTMS_MEDIA_TYPES", "").split(",") if name.strip()]
+if not MEDIA_TYPE_NAMES or len(set(MEDIA_TYPE_NAMES)) != len(MEDIA_TYPE_NAMES):
+    raise ValueError("RTMS_MEDIA_TYPES must list one or more unique media names")
+unknown_media = [name for name in MEDIA_TYPE_NAMES if name not in PUBLIC_MEDIA_NAMES]
+if unknown_media:
+    raise ValueError(f"Unsupported RTMS media type: {unknown_media[0]}")
+MEDIA_TYPES_MASK = sum(PUBLIC_MEDIA_NAMES[name] for name in MEDIA_TYPE_NAMES)
 
 # Setup logging
 logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper(), logging.DEBUG))
@@ -136,7 +132,7 @@ def media_params_for(media_name):
         "transcript": {"content_type": 5, "src_language": 9, "enable_lid": True},
         "chat": {"content_type": 5},
     }
-    return params if media_name == "all" else {media_name: params[media_name]}
+    return {media_name: params[media_name]}
 
 def send_signaling_message(stream_id, signaling_socket, payload):
     send_lock = signaling_send_locks.setdefault(stream_id, threading.Lock())
@@ -270,28 +266,20 @@ def connect_to_signaling_ws(meeting_uuid, stream_id, server_url):
                 clear_duplicate_retry_state(stream_id)
                 logger.info(
                     f"[Signaling] handshake_ok stream_id={stream_id} status_code=0 "
-                    f"mode={MEDIA_SOCKET_CONNECTION_MODE} media_types={MEDIA_TYPES_FLAG}"
+                    f"mode=split media_types={','.join(MEDIA_TYPE_NAMES)}"
                 )
                 media_urls = msg.get("media_server", {}).get("server_urls", {})
-                if MEDIA_SOCKET_CONNECTION_MODE == "unified":
-                    media_url = media_urls.get("all")
-                    if media_url:
-                        connect_to_media_ws(media_url, meeting_uuid, stream_id, ws, "all", 32)
-                    else:
-                        logger.error(f"[Signaling] stream_id={stream_id} missing server_urls.all")
-                else:
-                    requested_flags = ALL_INDIVIDUAL_MEDIA_FLAGS if MEDIA_TYPES_FLAG == 32 else MEDIA_TYPES_FLAG
-                    for media_name, media_type in MEDIA_DEFINITIONS.items():
-                        if requested_flags & media_type:
-                            media_url = media_urls.get(media_name)
-                            if media_url:
-                                connect_to_media_ws(
-                                    media_url, meeting_uuid, stream_id, ws, media_name, media_type
-                                )
-                            else:
-                                logger.warning(
-                                    f"[Signaling] stream_id={stream_id} missing server_urls.{media_name}"
-                                )
+                for media_name, media_type in MEDIA_DEFINITIONS.items():
+                    if MEDIA_TYPES_MASK & media_type:
+                        media_url = media_urls.get(media_name)
+                        if media_url:
+                            connect_to_media_ws(
+                                media_url, meeting_uuid, stream_id, ws, media_name, media_type
+                            )
+                        else:
+                            logger.warning(
+                                f"[Signaling] stream_id={stream_id} missing server_urls.{media_name}"
+                            )
             elif msg.get("msg_type") == 2:
                 with stream_lock:
                     signaling_handshakes_in_flight.discard(stream_id)
@@ -453,6 +441,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
     logger.info(
-        f"RTMS media configuration: mode={MEDIA_SOCKET_CONNECTION_MODE} media_types={MEDIA_TYPES_FLAG}"
+        f"RTMS media configuration: mode=split media_types={','.join(MEDIA_TYPE_NAMES)}"
     )
     app.run(host='0.0.0.0', port=PORT)

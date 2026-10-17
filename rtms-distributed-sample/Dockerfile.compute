@@ -24,7 +24,7 @@ ENV NODE_ENV=production \
   DRY_RUN=true \
   RTMS_SECRET_DIR=/var/run/rtms/secrets \
   RTMS_COMMON_HELPERS_MODULE=/opt/library/javascript/commonHelpers/HelperManager.js \
-  MEDIA_TYPES_FLAG=32
+  RTMS_MEDIA_TYPES=audio,video,transcript
 
 WORKDIR /app
 

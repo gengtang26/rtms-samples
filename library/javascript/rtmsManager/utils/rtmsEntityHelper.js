@@ -41,7 +41,6 @@ export function getPreferredMediaUrl(rtmsType, serverUrls, preferredType = null)
   }
 
   return (
-    serverUrls.all ||
     serverUrls.audio ||
     Object.values(serverUrls).find((url) => typeof url === 'string' && url.startsWith('ws')) ||
     ''

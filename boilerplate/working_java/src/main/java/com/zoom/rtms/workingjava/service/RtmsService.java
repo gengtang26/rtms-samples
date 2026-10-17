@@ -385,34 +385,22 @@ public class RtmsService {
             log.info("[Signaling] Connection state updated to 'ready' for {}", conn.getSessionId());
 
             JsonNode mediaUrls = msg.path("media_server").path("server_urls");
-            if (appConfig.getMediaSocketConnectionMode().equals("unified")) {
-                String mediaUrl = mediaUrls.path("all").asText();
+            Map<String, Integer> mediaDefinitions = Map.of(
+                    "audio", 1,
+                    "video", 2,
+                    "deskshare", 4,
+                    "transcript", 8,
+                    "chat", 16);
+            for (Map.Entry<String, Integer> media : mediaDefinitions.entrySet()) {
+                if ((appConfig.getMediaTypesFlag() & media.getValue()) == 0) {
+                    continue;
+                }
+                String mediaUrl = mediaUrls.path(media.getKey()).asText();
                 if (mediaUrl.isEmpty()) {
-                    log.error("[Signaling] No server_urls.all returned for {}", conn.getSessionId());
-                    return;
+                    log.warn("[Signaling] No server_urls.{} returned for {}", media.getKey(), conn.getSessionId());
+                    continue;
                 }
-                connectToMediaWebSocket(conn, mediaUrl, "all", 32);
-            } else {
-                int requestedFlags = appConfig.getMediaTypesFlag() == 32
-                        ? 1 | 2 | 4 | 8 | 16
-                        : appConfig.getMediaTypesFlag();
-                Map<String, Integer> mediaDefinitions = Map.of(
-                        "audio", 1,
-                        "video", 2,
-                        "deskshare", 4,
-                        "transcript", 8,
-                        "chat", 16);
-                for (Map.Entry<String, Integer> media : mediaDefinitions.entrySet()) {
-                    if ((requestedFlags & media.getValue()) == 0) {
-                        continue;
-                    }
-                    String mediaUrl = mediaUrls.path(media.getKey()).asText();
-                    if (mediaUrl.isEmpty()) {
-                        log.warn("[Signaling] No server_urls.{} returned for {}", media.getKey(), conn.getSessionId());
-                        continue;
-                    }
-                    connectToMediaWebSocket(conn, mediaUrl, media.getKey(), media.getValue());
-                }
+                connectToMediaWebSocket(conn, mediaUrl, media.getKey(), media.getValue());
             }
 
             subscribeToEvents(conn);
@@ -543,21 +531,20 @@ public class RtmsService {
     }
 
     private RtmsMessages.MediaParams buildMediaParams(String mediaName) {
-        boolean all = mediaName.equals("all");
         return new RtmsMessages.MediaParams(
-                all || mediaName.equals("audio")
+                mediaName.equals("audio")
                         ? new RtmsMessages.AudioParams(2, 1, 1, 1, 1, 100)
                         : null,
-                all || mediaName.equals("video")
+                mediaName.equals("video")
                         ? new RtmsMessages.VideoParams(3, 7, 3, 2, 25)
                         : null,
-                all || mediaName.equals("deskshare")
+                mediaName.equals("deskshare")
                         ? new RtmsMessages.DeskshareParams(3, 5, 2, 1)
                         : null,
-                all || mediaName.equals("transcript")
+                mediaName.equals("transcript")
                         ? new RtmsMessages.TranscriptParams(5, 9, true)
                         : null,
-                all || mediaName.equals("chat")
+                mediaName.equals("chat")
                         ? new RtmsMessages.ChatParams(5)
                         : null);
     }

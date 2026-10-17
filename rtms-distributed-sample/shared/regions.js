@@ -146,7 +146,6 @@ function firstUrl(serverUrls) {
   if (!serverUrls || typeof serverUrls !== 'object') return '';
 
   return (
-    serverUrls.all ||
     serverUrls.audio ||
     serverUrls.video ||
     serverUrls.transcript ||

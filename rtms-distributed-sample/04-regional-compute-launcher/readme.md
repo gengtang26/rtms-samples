@@ -53,7 +53,7 @@ npm run docker:build:compute
 | `K8S_COMPUTE_MEMORY_LIMIT` | Per-Job memory limit, default `1Gi` |
 | `COMPUTE_ARTIFACT_STORAGE_URL` | Artifact API URL reachable from pods |
 | `COMPUTE_REALTIME_CACHE_URL` | Cache API URL reachable from pods |
-| `MEDIA_TYPES_FLAG` | RTMS media request, default `32` |
+| `RTMS_MEDIA_TYPES` | Required comma-separated media names passed to compute jobs |
 
 ## Notes
 

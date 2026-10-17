@@ -63,9 +63,12 @@ rtms.on('transcript', lambda data: print(f"{data['user_name']}: {data['text']}")
 | 4 | `MEDIA.SHARESCREEN` | `MediaType.SHARESCREEN` | Screen share |
 | 8 | `MEDIA.TRANSCRIPT` | `MediaType.TRANSCRIPT` | Real-time transcription |
 | 16 | `MEDIA.CHAT` | `MediaType.CHAT` | Chat messages |
-| 32 | `MEDIA.ALL` | `MediaType.ALL` | All media types |
 
 Combine with bitwise OR: `MEDIA.AUDIO | MEDIA.TRANSCRIPT`
+
+Each selected flag opens a separate data connection. Unified media socket mode
+and `media_type: 32` are deprecated; send exactly one concrete media type in
+each data handshake.
 
 ## Presets (JavaScript)
 
@@ -78,9 +81,6 @@ await RTMSManager.init({ ...RTMSManager.PRESETS.TRANSCRIPTION, credentials });
 
 // Audio + video for recording
 await RTMSManager.init({ ...RTMSManager.PRESETS.VIDEO_RECORDING, credentials });
-
-// All media types
-await RTMSManager.init({ ...RTMSManager.PRESETS.FULL_MEDIA, credentials });
 ```
 
 ## Events
@@ -159,11 +159,11 @@ await RTMSManager.init({
     videoSdk: { clientId, clientSecret, secretToken },  // Optional
   },
   
+  mediaTypes: RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.TRANSCRIPT,
+
   // Optional
-  mediaTypes: RTMSManager.MEDIA.ALL,  // Default: ALL
   logging: 'info',                     // 'off'|'error'|'warn'|'info'|'debug'
   logDir: '/var/log/rtms',            // Log file directory
-  useUnifiedMediaSocket: false,        // Single socket for all media
   enableGapFilling: false,             // Fill gaps in recordings
   asyncMediaEvents: true,              // Keep media consumers outside socket parsing
   maxMediaEventQueueSize: 500,         // Bound memory under slow consumers
@@ -605,6 +605,7 @@ For continuous recordings, enable gap filling to insert silence during network d
 ```javascript
 await RTMSManager.init({
   credentials: {...},
+  mediaTypes: RTMSManager.MEDIA.AUDIO,
   enableGapFilling: true
 });
 ```

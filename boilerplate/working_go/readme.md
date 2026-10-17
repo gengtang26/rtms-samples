@@ -31,22 +31,15 @@ ZOOM_CLIENT_ID=your_client_id
 ZOOM_CLIENT_SECRET=your_client_secret
 PORT=3000
 WEBHOOK_PATH=/webhook
-MEDIA_SOCKET_CONNECTION_MODE=split
-MEDIA_TYPES_FLAG=11
+RTMS_MEDIA_TYPES=audio,video,transcript
 ```
 
-`MEDIA_TYPES_FLAG` combines audio (`1`), video (`2`), screen share (`4`),
-transcript (`8`), and chat (`16`). Split mode expands `11` into separate audio,
-video, and transcript sockets whose handshakes use `1`, `2`, and `8`.
+`RTMS_MEDIA_TYPES` accepts `audio`, `video`, `screenshare`, `transcript`, and
+`chat`. Each selected name opens a separate data connection.
 
-Use one unified media socket with:
-
-```env
-MEDIA_SOCKET_CONNECTION_MODE=unified
-MEDIA_TYPES_FLAG=32
-```
-
-Unified mode requires `32`; combined masks such as `11` must use split mode.
+> Unified media socket mode and `media_type: 32` are deprecated. RTMS clients
+> must open a separate data connection for each required media type and send one
+> concrete media type per handshake.
 
 ## Running the Example
 
@@ -70,7 +63,7 @@ https://<your-ngrok-subdomain>.ngrok.io/webhook
 ## How it Works
 
 1. The Go server listens for webhook events at the defined endpoint.
-2. On receiving `meeting.rtms_started`, it establishes a signaling socket and either split or unified media sockets.
+2. On receiving `meeting.rtms_started`, it establishes a signaling socket and one data socket per selected media type.
 3. Media messages are received through the WebSocket connection:
    - **msg_type 14**: Audio
    - **msg_type 15**: Video

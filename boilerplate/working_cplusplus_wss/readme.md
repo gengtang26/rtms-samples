@@ -1,6 +1,6 @@
 # Zoom RTMS WebSocket C++ Client
 
-This project demonstrates how to connect to Zoom's Real-Time Media Service (RTMS) using C++. It establishes WebSocket connections to the Zoom Event server, signaling server, and split or unified media servers, handling authentication, keep-alives, H.264 video, and PCM audio.
+This project demonstrates how to connect to Zoom's Real-Time Media Service (RTMS) using C++. It establishes WebSocket connections to the Zoom Event server, signaling server, and one media server per selected type, handling authentication, keep-alives, H.264 video, and PCM audio.
 
 ---
 
@@ -68,22 +68,15 @@ cmake --build build
 CLIENT_ID=your_client_id
 CLIENT_SECRET=your_client_secret
 ZOOM_EVENT_WS=wss://ws.zoom.us/ws?subscriptionId=abc123
-MEDIA_SOCKET_CONNECTION_MODE=split
-MEDIA_TYPES_FLAG=11
+RTMS_MEDIA_TYPES=audio,video,transcript
 ```
 
-`MEDIA_TYPES_FLAG` combines audio (`1`), video (`2`), screen share (`4`),
-transcript (`8`), and chat (`16`). Split mode expands `11` into separate audio,
-video, and transcript sockets whose handshakes use `1`, `2`, and `8`.
+`RTMS_MEDIA_TYPES` accepts `audio`, `video`, `screenshare`, `transcript`, and
+`chat`. Each selected name opens a separate data connection.
 
-For one unified socket, use:
-
-```ini
-MEDIA_SOCKET_CONNECTION_MODE=unified
-MEDIA_TYPES_FLAG=32
-```
-
-Unified mode requires `32`; combined masks such as `11` must use split mode.
+> Unified media socket mode and `media_type: 32` are deprecated. RTMS clients
+> must open a separate data connection for each required media type and send one
+> concrete media type per handshake.
 
 ---
 
@@ -97,8 +90,7 @@ Unified mode requires `32`; combined masks such as `11` must use split mode.
    - Wait for `msg_type = 2`
    - Extract the available media server URLs
 5. **Connect to Media WebSocket(s)**
-   - Split mode opens one socket per selected media type
-   - Unified mode uses `server_urls.all` and `media_type=32`
+   - Opens one socket per selected media type
    - Send media handshake
    - On success, stream begins
    - Respond to keep-alive messages

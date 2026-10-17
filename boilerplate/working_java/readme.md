@@ -31,22 +31,15 @@ SERVER_PORT=5050
 # Application Configuration
 APP_WEBHOOK_PATH=/webhook
 APP_MODE=webhook
-MEDIA_SOCKET_CONNECTION_MODE=split
-MEDIA_TYPES_FLAG=11
+RTMS_MEDIA_TYPES=audio,video,transcript
 ```
 
-`MEDIA_TYPES_FLAG` combines audio (`1`), video (`2`), screen share (`4`),
-transcript (`8`), and chat (`16`). Split mode expands `11` into separate audio,
-video, and transcript sockets whose handshakes use `1`, `2`, and `8`.
+`RTMS_MEDIA_TYPES` accepts `audio`, `video`, `screenshare`, `transcript`, and
+`chat`. Each selected name opens a separate data connection.
 
-Use one unified media socket with:
-
-```properties
-MEDIA_SOCKET_CONNECTION_MODE=unified
-MEDIA_TYPES_FLAG=32
-```
-
-Unified mode requires `32`; combined masks such as `11` must use split mode.
+> Unified media socket mode and `media_type: 32` are deprecated. RTMS clients
+> must open a separate data connection for each required media type and send one
+> concrete media type per handshake.
 
 ## Running the Example
 
@@ -108,8 +101,8 @@ Zoom App/Webhook ──► WebhookController ──► RtmsService
 
 ## WebSocket Connections
 
-The application maintains one signaling connection plus either one unified media
-connection or one media connection for each selected type.
+The application maintains one signaling connection plus one media connection
+for each selected type.
 
 ### Signaling WebSocket
 - Handles session management and control messages
@@ -155,8 +148,7 @@ The application implements the Zoom RTMS WebSocket protocol:
 - `SERVER_PORT`: Server port (default: 5050)
 - `APP_WEBHOOK_PATH`: Webhook endpoint path (default: /webhook)
 - `APP_MODE`: Application mode (default: webhook)
-- `MEDIA_SOCKET_CONNECTION_MODE`: `split` (default) or `unified`
-- `MEDIA_TYPES_FLAG`: Selected media bitmask; unified mode requires `32`
+- `RTMS_MEDIA_TYPES`: Required comma-separated concrete media names
 
 ### Configuration Sanitization
 The application automatically strips surrounding quotes from configuration values, so `ZOOM_CLIENT_ID="value"` and `ZOOM_CLIENT_ID=value` are both handled correctly.
@@ -220,7 +212,7 @@ This Spring Boot implementation provides:
 Equivalent features from the Node.js version:
 - Webhook handling with validation
 - RTMS session start/stop
-- Split or unified media WebSocket connections
+- One media WebSocket connection per selected media type
 - Event processing and logging
 - Connection reconnection logic
 - HMAC signature generation

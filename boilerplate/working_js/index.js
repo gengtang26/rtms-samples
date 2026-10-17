@@ -16,38 +16,29 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const { MEDIA_PARAMS } = RTMSManager;
-const ALL_INDIVIDUAL_MEDIA_FLAGS = 1 | 2 | 4 | 8 | 16;
+const MEDIA_TYPE_FLAGS = Object.freeze({
+  audio: RTMSManager.MEDIA.AUDIO,
+  video: RTMSManager.MEDIA.VIDEO,
+  screenshare: RTMSManager.MEDIA.SHARESCREEN,
+  transcript: RTMSManager.MEDIA.TRANSCRIPT,
+  chat: RTMSManager.MEDIA.CHAT,
+});
 
 function normalizeMode(value, fallback) {
   return String(value || fallback).trim().toLowerCase();
 }
 
 function getMediaTypesFlagFromEnv() {
-  const rawValue = String(process.env.MEDIA_TYPES_FLAG || '32').trim();
-  const parsedValue = Number.parseInt(rawValue, 10);
-
-  const isIndividualMediaMask =
-    parsedValue > 0 && (parsedValue & ~ALL_INDIVIDUAL_MEDIA_FLAGS) === 0;
-
-  if (!Number.isInteger(parsedValue) || (parsedValue !== 32 && !isIndividualMediaMask)) {
-    throw new Error(
-      `[Consumer] Unsupported MEDIA_TYPES_FLAG: ${rawValue}. Combine audio (1), video (2), screen share (4), transcript (8), and chat (16), or use 32 for all.`
-    );
+  const names = String(process.env.RTMS_MEDIA_TYPES || '').split(',')
+    .map((name) => name.trim().toLowerCase()).filter(Boolean);
+  if (names.length === 0 || new Set(names).size !== names.length) {
+    throw new Error('RTMS_MEDIA_TYPES must list one or more unique media names');
   }
-
-  return parsedValue;
-}
-
-function getMediaSocketConnectionModeFromEnv() {
-  const mode = normalizeMode(process.env.MEDIA_SOCKET_CONNECTION_MODE, 'split');
-
-  if (!['split', 'unified'].includes(mode)) {
-    throw new Error(
-      `[Consumer] Unsupported MEDIA_SOCKET_CONNECTION_MODE: ${process.env.MEDIA_SOCKET_CONNECTION_MODE}. Use split or unified.`
-    );
-  }
-
-  return mode;
+  return names.reduce((flags, name) => {
+    const flag = MEDIA_TYPE_FLAGS[name];
+    if (!flag) throw new Error(`Unsupported RTMS media type: ${name}`);
+    return flags | flag;
+  }, 0);
 }
 
 function getAudioDataOptFromEnv() {
@@ -104,13 +95,6 @@ const defaultVideoSubscriptionUserId = process.env.DEFAULT_VIDEO_SUBSCRIPTION_US
   ? String(process.env.DEFAULT_VIDEO_SUBSCRIPTION_USER_ID).trim()
   : '';
 const mediaTypesFlag = getMediaTypesFlagFromEnv();
-const mediaSocketConnectionMode = getMediaSocketConnectionModeFromEnv();
-
-if (mediaSocketConnectionMode === 'unified' && mediaTypesFlag !== 32) {
-  throw new Error(
-    '[Consumer] MEDIA_SOCKET_CONNECTION_MODE=unified requires MEDIA_TYPES_FLAG=32. Use split mode for combined masks such as 11.'
-  );
-}
 
 const rtmsConfig = {
   logging: {
@@ -118,7 +102,6 @@ const rtmsConfig = {
     logDir: path.join(__dirname, 'logs'),
     console: true
   },
-  mediaSocketConnectionMode,
   mediaTypesFlag,
   credentials: {
     meeting: {

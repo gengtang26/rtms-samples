@@ -40,19 +40,19 @@ const ZOOM_STATUS_CODES = {
   13: { code: 'STATUS_MEDIA_TYPE_CHAT_NOT_SUPPORT', message: 'Chat media type is not supported', category: 'media' },
   14: {
     code: 'STATUS_MEDIA_TYPE_INVALID_VALUE',
-    message: 'media_type has an invalid RTMS bitmask value',
+    message: 'media_type is not a concrete RTMS media value',
     category: 'request',
     causes: [
-      'media_type in the RTMS data handshake is not a valid RTMS media flag or bitmask',
-      'MEDIA_TYPES_FLAG is set to an unsupported value in the sample configuration'
+      'media_type in the RTMS data handshake is not one concrete RTMS media value',
+      'mediaTypes must select one or more concrete RTMS media types'
     ],
     fixes: [
-      'Use valid RTMS media flags such as 1=audio, 2=video, 4=deskshare, 8=transcript, 16=chat, or 32=all',
-      'Review the top-level media_type bitmask in the data handshake payload'
+      'Use exactly one value: 1=audio, 2=video, 4=deskshare, 8=transcript, or 16=chat',
+      'Open a separate data connection for every required media type'
     ],
     docsUrl: 'https://developers.zoom.us/docs/rtms/media-types/'
   },
-  15: { code: 'STATUS_MEDIA_DATA_ALL_CONNECTION_EXIST', message: 'Unified media connection already exists', category: 'connection' },
+  15: { code: 'STATUS_MEDIA_DATA_ALL_CONNECTION_EXIST', message: 'A legacy aggregate media connection already exists', category: 'connection' },
   16: { code: 'STATUS_DUPLICATE_MEDIA_DATA_CONNECTION', message: 'Duplicate media data connection detected', category: 'connection' },
   17: { code: 'STATUS_INVALID_MEDIA_PARAMS', message: 'Invalid media_params payload', category: 'request' },
   18: { code: 'STATUS_INVALID_MEDIA_AUDIO_PARAMS', message: 'Invalid audio media parameters', category: 'request' },

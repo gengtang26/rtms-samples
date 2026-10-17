@@ -48,9 +48,6 @@ def get_preferred_media_url(rtms_type: Optional[str], server_urls: Any, preferre
     if normalize_rtms_type(rtms_type) == 'contact_center' and server_urls.get('audio'):
         return server_urls['audio']
 
-    if server_urls.get('all'):
-        return server_urls['all']
-
     if server_urls.get('audio'):
         return server_urls['audio']
 

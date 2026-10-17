@@ -23,19 +23,12 @@ var webhookPath = Environment.GetEnvironmentVariable("WEBHOOK_PATH") ?? "/webhoo
 var zoomSecretToken = Environment.GetEnvironmentVariable("ZOOM_SECRET_TOKEN");
 var clientId = Environment.GetEnvironmentVariable("ZOOM_CLIENT_ID");
 var clientSecret = Environment.GetEnvironmentVariable("ZOOM_CLIENT_SECRET");
-var mediaTypesFlag = ParseMediaTypesFlag(Environment.GetEnvironmentVariable("MEDIA_TYPES_FLAG") ?? "11");
-var mediaSocketConnectionMode = ParseMediaSocketConnectionMode(
-    Environment.GetEnvironmentVariable("MEDIA_SOCKET_CONNECTION_MODE") ?? "split");
-
-if (mediaSocketConnectionMode == "unified" && mediaTypesFlag != 32)
-{
-    throw new InvalidOperationException(
-        "MEDIA_SOCKET_CONNECTION_MODE=unified requires MEDIA_TYPES_FLAG=32. Use split mode for combined masks such as 11.");
-}
+var configuredMediaTypes = Environment.GetEnvironmentVariable("RTMS_MEDIA_TYPES") ?? "";
+var mediaTypesFlag = ParseMediaTypes(configuredMediaTypes);
 
 Console.WriteLine($"DEBUG - PORT: {port}");
 Console.WriteLine($"DEBUG - WEBHOOK_PATH: {webhookPath}");
-Console.WriteLine($"DEBUG - MEDIA_TYPES_FLAG: {mediaTypesFlag} ({mediaSocketConnectionMode} mode)");
+Console.WriteLine($"DEBUG - RTMS_MEDIA_TYPES: {configuredMediaTypes} (split sockets)");
 
 var activeConnections = new ConcurrentDictionary<string, ConcurrentDictionary<string, ClientWebSocket>>();
 var signalingInFlight = new ConcurrentDictionary<string, byte>();
@@ -197,20 +190,6 @@ async Task ConnectToSignalingWebSocket(string meetingUuid, string streamId, stri
             {
                 case 2 when msg.GetProperty("status_code").GetInt32() == 0:
                     var serverUrls = msg.GetProperty("media_server").GetProperty("server_urls");
-                    if (mediaSocketConnectionMode == "unified")
-                    {
-                        if (!serverUrls.TryGetProperty("all", out var allMediaUrlElement))
-                        {
-                            logger.LogWarning("No unified media URL returned for stream {streamId}", streamId);
-                            break;
-                        }
-
-                        await ConnectToMediaWebSocket(
-                            allMediaUrlElement.GetString(), meetingUuid, streamId, ws, "all", 32, logger);
-                        break;
-                    }
-
-                    var requestedFlags = mediaTypesFlag == 32 ? 31 : mediaTypesFlag;
                     var mediaDefinitions = new[]
                     {
                         (Name: "audio", Flag: 1),
@@ -222,7 +201,7 @@ async Task ConnectToSignalingWebSocket(string meetingUuid, string streamId, stri
                     var mediaConnections = new List<Task>();
                     foreach (var media in mediaDefinitions)
                     {
-                        if ((requestedFlags & media.Flag) == 0)
+                        if ((mediaTypesFlag & media.Flag) == 0)
                             continue;
 
                         if (!serverUrls.TryGetProperty(media.Name, out var mediaUrlElement))
@@ -274,14 +253,6 @@ async Task ConnectToMediaWebSocket(string? mediaUrl, string meetingUuid, string 
         "deskshare" => new { deskshare = new { content_type = 3, codec = 5, resolution = 2, fps = 1 } },
         "transcript" => new { transcript = new { content_type = 5, src_language = 9, enable_lid = true } },
         "chat" => new { chat = new { content_type = 5 } },
-        "all" => new
-        {
-            audio = new { content_type = 2, sample_rate = 1, channel = 1, codec = 1, data_opt = 1, send_rate = 100 },
-            video = new { content_type = 3, codec = 7, resolution = 2, fps = 25, data_opt = 3 },
-            deskshare = new { content_type = 3, codec = 5, resolution = 2, fps = 1 },
-            transcript = new { content_type = 5, src_language = 9, enable_lid = true },
-            chat = new { content_type = 5 }
-        },
         _ => throw new ArgumentOutOfRangeException(nameof(mediaName), mediaName, "Unsupported media type")
     };
     var handshake = new
@@ -389,29 +360,24 @@ _ = Task.Run(async () =>
 });
 }
 
-int ParseMediaTypesFlag(string rawValue)
+int ParseMediaTypes(string rawValue)
 {
-    const int allIndividualMediaFlags = 1 | 2 | 4 | 8 | 16;
-    if (!int.TryParse(rawValue.Trim(), out var parsedValue) ||
-        (parsedValue != 32 && (parsedValue <= 0 || (parsedValue & ~allIndividualMediaFlags) != 0)))
+    var mediaFlags = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
     {
-        throw new InvalidOperationException(
-            $"Unsupported MEDIA_TYPES_FLAG: {rawValue}. Combine audio (1), video (2), screen share (4), transcript (8), and chat (16), or use 32 for all.");
-    }
-
-    return parsedValue;
-}
-
-string ParseMediaSocketConnectionMode(string rawValue)
-{
-    var normalizedValue = rawValue.Trim().ToLowerInvariant();
-    if (normalizedValue is not ("split" or "unified"))
+        ["audio"] = 1,
+        ["video"] = 2,
+        ["screenshare"] = 4,
+        ["transcript"] = 8,
+        ["chat"] = 16,
+    };
+    var names = rawValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    if (names.Length == 0 || names.Distinct(StringComparer.OrdinalIgnoreCase).Count() != names.Length)
     {
-        throw new InvalidOperationException(
-            $"Unsupported MEDIA_SOCKET_CONNECTION_MODE: {rawValue}. Use split or unified.");
+        throw new InvalidOperationException("RTMS_MEDIA_TYPES must list one or more unique media names.");
     }
-
-    return normalizedValue;
+    return names.Aggregate(0, (flags, name) => flags | (mediaFlags.TryGetValue(name, out var flag)
+        ? flag
+        : throw new InvalidOperationException($"Unsupported RTMS media type: {name}")));
 }
 
 async Task SendSignalingMessageAsync(ClientWebSocket signalingSocket, string streamId, object message)

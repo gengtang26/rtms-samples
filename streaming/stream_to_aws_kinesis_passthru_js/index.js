@@ -198,9 +198,11 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
                 clearTimeout(conn._duplicateSignalRetryTimer);
                 conn._duplicateSignalRetryTimer = null;
             }
-            const mediaUrl = msg.media_server?.server_urls?.all;
-            if (mediaUrl) {
-                connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, ws);
+            const mediaUrls = msg.media_server?.server_urls || {};
+            for (const mediaType of ['audio', 'video']) {
+                if (mediaUrls[mediaType]) {
+                    connectToMediaWebSocket(mediaUrls[mediaType], meetingUuid, streamId, ws, mediaType);
+                }
             }
         } else if (msg.msg_type === 2) {
             conn._signalingHandshakeInFlight = false;
@@ -277,14 +279,16 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
     });
 }
 
-function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocket) {
-    console.log(`Connecting to media WebSocket at ${mediaUrl}`);
+function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocket, mediaType) {
+    console.log(`Connecting ${mediaType} WebSocket at ${mediaUrl}`);
 
     const mediaWs = new WebSocket(mediaUrl, { rejectUnauthorized: false });
 
     const conn = activeConnections.get(streamId);
-    conn.media = mediaWs;
-    conn.mediaUrl = mediaUrl;
+    conn.media ||= {};
+    conn.mediaUrls ||= {};
+    conn.media[mediaType] = mediaWs;
+    conn.mediaUrls[mediaType] = mediaUrl;
 
 
 
@@ -301,9 +305,9 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
             meeting_uuid: meetingUuid,
             rtms_stream_id: streamId,
             signature,
-            media_type: 3, // AUDIO | VIDEO
+            media_type: mediaType === 'audio' ? 1 : 2,
             payload_encryption: false,
-            media_params: {
+            media_params: mediaType === 'audio' ? {
                 audio: {
                     content_type: 2,
                     sample_rate: 1,
@@ -311,7 +315,8 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
                     codec: 1,
                     data_opt: 1,
                     send_rate: 100
-                },
+                }
+            } : {
                 video: {
                     content_type: 3,
                     codec: 7, //H264
@@ -389,12 +394,12 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
         console.log('🛑 Media WebSocket closed');
         const conn = activeConnections.get(streamId);
         if (conn) {
-            delete conn.media;
+            if (conn.media?.[mediaType] === mediaWs) delete conn.media[mediaType];
             if (conn.shouldReconnect && conn.signaling?.readyState === WebSocket.OPEN) {
                 console.log(`🔄 Media reconnecting in ${RECONNECT_DELAY}ms...`);
                 setTimeout(() => {
                     if (conn.shouldReconnect) {
-                        connectToMediaWebSocket(conn.mediaUrl, conn.meetingUuid, streamId, conn.signaling);
+                        connectToMediaWebSocket(conn.mediaUrls[mediaType], conn.meetingUuid, streamId, conn.signaling, mediaType);
                     }
                 }, RECONNECT_DELAY);
             } else if (conn.shouldReconnect) {
@@ -413,9 +418,7 @@ function stopStreaming(streamId) {
     clearSignalingTimers(conn);
     releaseSignalingConnectLock(conn, conn._signalingConnectSocket);
 
-    if (conn.media) {
-        conn.media.close();
-    }
+    Object.values(conn.media || {}).forEach((socket) => socket.close());
     if (conn.signaling) {
         conn.signaling.close();
     }

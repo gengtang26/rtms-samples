@@ -105,11 +105,14 @@ MediaType.VIDEO        # 2
 MediaType.SHARESCREEN  # 4
 MediaType.TRANSCRIPT   # 8
 MediaType.CHAT         # 16
-MediaType.ALL          # 32
 
 # Combine with bitwise OR
 media_types = MediaType.AUDIO | MediaType.TRANSCRIPT  # 9
 ```
+
+Each selected flag opens a separate data connection. Unified media socket mode
+and `media_type: 32` are deprecated; send exactly one concrete media type in
+each data handshake.
 
 ## Presets
 
@@ -122,9 +125,6 @@ await RTMSManager.init({ **RTMSManager.PRESETS['TRANSCRIPTION'], 'credentials': 
 
 # Audio + video (recording)
 await RTMSManager.init({ **RTMSManager.PRESETS['VIDEO_RECORDING'], 'credentials': credentials })
-
-# All media types
-await RTMSManager.init({ **RTMSManager.PRESETS['FULL_MEDIA'], 'credentials': credentials })
 ```
 
 ## Events
@@ -174,7 +174,7 @@ await RTMSManager.init({
         'contact_center': { 'client_id': '...', 'client_secret': '...', 'secret_token': '...' },  # Optional
         'phone': { 'client_id': '...', 'client_secret': '...', 'secret_token': '...' },  # Optional
     },
-    'media_types': MediaType.ALL,
+    'media_types': MediaType.AUDIO | MediaType.TRANSCRIPT,
     'logging': 'info',            # 'off' | 'error' | 'warn' | 'info' | 'debug'
     'log_dir': '/var/log/rtms',
     'enable_gap_filling': False,  # Insert silence during network drops (for recording)

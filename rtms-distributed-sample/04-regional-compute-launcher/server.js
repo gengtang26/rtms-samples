@@ -66,7 +66,7 @@ app.get('/health', (_req, res) => {
     },
     computeJobArtifactStorageUrl: computeArtifactStorageUrl || null,
     computeJobRealtimeCacheUrl: computeRealtimeCacheUrl || null,
-    computeJobMediaTypesFlag: process.env.MEDIA_TYPES_FLAG || '32',
+    computeJobMediaTypes: process.env.RTMS_MEDIA_TYPES || '',
     jobPrefix,
     stopJobDeleteDelayMs,
     recentLaunches: localLaunches.slice(-20)
@@ -137,8 +137,7 @@ async function handleEnvelope(envelope) {
     ttlSecondsAfterFinished: Number(process.env.K8S_JOB_TTL_SECONDS_AFTER_FINISHED || 900),
     env: {
       DRY_RUN: process.env.COMPUTE_DRY_RUN || process.env.DRY_RUN || 'false',
-      MEDIA_TYPES_FLAG: process.env.MEDIA_TYPES_FLAG || '32',
-      MEDIA_SOCKET_CONNECTION_MODE: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
+      RTMS_MEDIA_TYPES: process.env.RTMS_MEDIA_TYPES || '',
       AUDIO_STREAM_MODE: process.env.AUDIO_STREAM_MODE || 'mixed',
       VIDEO_STREAM_MODE: process.env.VIDEO_STREAM_MODE || 'active',
       ONE_STREAM_PER_JOB: process.env.ONE_STREAM_PER_JOB || 'true',

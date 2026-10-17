@@ -217,9 +217,9 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
                 clearTimeout(conn._duplicateSignalRetryTimer);
                 conn._duplicateSignalRetryTimer = null;
             }
-            const mediaUrl = msg.media_server?.server_urls?.all;
-            if (mediaUrl) {
-                connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, ws);
+            const mediaUrls = msg.media_server?.server_urls || {};
+            if (mediaUrls.audio || mediaUrls.video) {
+                connectToMediaWebSocket(mediaUrls, meetingUuid, streamId, ws);
             }
         } else if (msg.msg_type === 2) {
             conn._signalingHandshakeInFlight = false;
@@ -296,15 +296,16 @@ function connectToSignalingWebSocket(meetingUuid, streamId, serverUrl) {
     });
 }
 
-function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocket) {
-    console.log(`Connecting to media WebSocket at ${mediaUrl}`);
+function connectToMediaWebSocket(mediaUrls, meetingUuid, streamId, signalingSocket) {
+    console.log('Connecting separate audio and video media WebSockets');
 
     const { videoStream, audioStream, ffmpeg } = startIVSStream();
 
     const conn = activeConnections.get(streamId);
     conn.streams = { videoStream, audioStream };
     conn.ffmpegProcess = ffmpeg;
-    conn.mediaUrl = mediaUrl;
+    conn.mediaUrls = mediaUrls;
+    conn.media ||= {};
 
     // Initialize timing variables for keep-alive
     let lastVideoTime = Date.now();
@@ -380,8 +381,11 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
 
     activeConnections.get(streamId).videoMuteDetectionTimer = videoMuteDetectionTimer;
 
+    const connectMediaType = (mediaType) => {
+    const mediaUrl = mediaUrls[mediaType];
+    if (!mediaUrl) return;
     const mediaWs = new WebSocket(mediaUrl, { rejectUnauthorized: false });
-    conn.media = mediaWs;
+    conn.media[mediaType] = mediaWs;
 
     mediaWs.on('open', () => {
         const signature = generateSignature(CLIENT_ID, meetingUuid, streamId, CLIENT_SECRET);
@@ -391,9 +395,9 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
             meeting_uuid: meetingUuid,
             rtms_stream_id: streamId,
             signature,
-            media_type: 3, // AUDIO | VIDEO
+            media_type: mediaType === 'audio' ? 1 : 2,
             payload_encryption: false,
-            media_params: {
+            media_params: mediaType === 'audio' ? {
               audio: {
                 content_type: 2,
                 sample_rate: 1,
@@ -401,7 +405,8 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
                 codec: 1,
                 data_opt: 1,
                 send_rate: 100
-              },
+              }
+            } : {
               video: {
                 content_type: 3,
                 codec: 7, //H264
@@ -476,12 +481,12 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
         console.log('🛑 Media WebSocket closed');
         const conn = activeConnections.get(streamId);
         if (conn) {
-            delete conn.media;
+            if (conn.media?.[mediaType] === mediaWs) delete conn.media[mediaType];
             if (conn.shouldReconnect && conn.signaling?.readyState === WebSocket.OPEN) {
                 console.log(`🔄 Media reconnecting in ${RECONNECT_DELAY}ms...`);
                 setTimeout(() => {
                     if (conn.shouldReconnect) {
-                        connectToMediaWebSocket(conn.mediaUrl, conn.meetingUuid, streamId, conn.signaling);
+                        connectMediaType(mediaType);
                     }
                 }, RECONNECT_DELAY);
             } else if (conn.shouldReconnect) {
@@ -489,6 +494,10 @@ function connectToMediaWebSocket(mediaUrl, meetingUuid, streamId, signalingSocke
             }
         }
     });
+    };
+
+    connectMediaType('audio');
+    connectMediaType('video');
 }
 
 function stopStreaming(streamId) {
@@ -500,10 +509,10 @@ function stopStreaming(streamId) {
     clearSignalingTimers(conn);
     releaseSignalingConnectLock(conn, conn._signalingConnectSocket);
 
-    if (conn.media) {
-        conn.media.removeAllListeners('error');
-        conn.media.close();
-    }
+    Object.values(conn.media || {}).forEach((socket) => {
+        socket.removeAllListeners('error');
+        socket.close();
+    });
     if (conn.signaling) {
         conn.signaling.close();
     }

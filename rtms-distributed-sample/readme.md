@@ -203,7 +203,7 @@ Fill these groups first:
 | Artifact storage | `ARTIFACT_STORAGE_PROVIDER`, `ARTIFACT_BUCKET`, `ARTIFACT_S3_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
 | Realtime cache | `REDIS_PASSWORD`, `REALTIME_CACHE_REDIS_URL`, `REALTIME_CACHE_REDIS_PASSWORD` |
 | Observability | `LOKI_PUSH_URL`, `COMPUTE_LOKI_PUSH_URL`, `SERVICE_LOG_LEVEL`, `RTMS_LOG_LEVEL` |
-| Media request | `MEDIA_TYPES_FLAG`, `AUDIO_STREAM_MODE`, `VIDEO_STREAM_MODE` |
+| Media request | `RTMS_MEDIA_TYPES`, `AUDIO_STREAM_MODE`, `VIDEO_STREAM_MODE` |
 
 ## Service URL Wiring
 
@@ -228,7 +228,12 @@ COMPUTE_LOKI_PUSH_URL=https://loki.internal/loki/api/v1/push
 
 The dispatcher reads the readable `SPOKE_*_URL` values for the common four-spoke layout. `REGIONAL_SPOKE_ENDPOINTS` still works as a JSON override when you need custom route keys, extra spoke groups, or temporary failover targets.
 
-`MEDIA_TYPES_FLAG=32` requests all available RTMS media. Use `3` for audio + video or `9` for audio + transcript.
+`RTMS_MEDIA_TYPES` is required and accepts comma-separated names such as
+`audio,video` or `audio,transcript`. The compute job opens one data connection
+per selected media type.
+
+> Unified media socket mode and `media_type: 32` are deprecated. Do not request
+> an aggregate media connection.
 
 For Kubernetes Jobs, changing the host `.env` is not enough. Update the Kubernetes Secret and recreate old failed Jobs so new pods receive current credentials.
 

@@ -21,6 +21,26 @@ const CHAT_GROUP_EVENT_TYPES = Object.freeze({
   MEMBER_STATUS_UPDATED: 14
 });
 
+const MEDIA_DEFINITIONS = Object.freeze([
+  { name: 'audio', publicName: 'audio', flag: 1 },
+  { name: 'video', publicName: 'video', flag: 2 },
+  { name: 'deskshare', publicName: 'screenshare', flag: 4 },
+  { name: 'transcript', publicName: 'transcript', flag: 8 },
+  { name: 'chat', publicName: 'chat', flag: 16 },
+]);
+
+function parseMediaTypes(value) {
+  const names = String(value || '').split(',').map((name) => name.trim().toLowerCase()).filter(Boolean);
+  if (names.length === 0 || new Set(names).size !== names.length) {
+    throw new Error('RTMS_MEDIA_TYPES must list one or more unique media names');
+  }
+  return names.map((name) => {
+    const definition = MEDIA_DEFINITIONS.find((item) => item.publicName === name);
+    if (!definition) throw new Error(`Unsupported RTMS media type: ${name}`);
+    return definition;
+  });
+}
+
 function parseChatPayload(rawData) {
   if (typeof rawData !== 'string') {
     return rawData || {};
@@ -40,7 +60,8 @@ const config = {
   webhookPath: process.env.WEBHOOK_PATH || '/webhook',
   clientId: process.env.ZOOM_CLIENT_ID,
   clientSecret: process.env.ZOOM_CLIENT_SECRET,
-  zoomSecretToken: process.env.ZOOM_SECRET_TOKEN
+  zoomSecretToken: process.env.ZOOM_SECRET_TOKEN,
+  mediaTypes: parseMediaTypes(process.env.RTMS_MEDIA_TYPES)
 };
 
 console.log('Configuration loaded:');
@@ -371,7 +392,8 @@ function handleMediaMessage(data, {
   mediaWs,
   signalingSocket,
   sessionID,
-  streamId
+  streamId,
+  mediaType
 }) {
   try {
     const msg = JSON.parse(data.toString());
@@ -384,7 +406,7 @@ function handleMediaMessage(data, {
             msg_type: 7,
             rtms_stream_id: streamId
           }));
-          conn.media.state = 'streaming';
+          conn.media[mediaType].state = 'streaming';
         }
         else {
           logRtmsStatusCode(msg.status_code);
@@ -396,7 +418,7 @@ function handleMediaMessage(data, {
 
       case 12: // KEEP_ALIVE_REQ
         console.log("case 12");
-        conn.media.lastKeepAlive = Date.now();
+        conn.media[mediaType].lastKeepAlive = Date.now();
         console.log('Responding to KEEP_ALIVE_REQ');
         mediaWs.send(JSON.stringify({
           msg_type: 13,
@@ -471,9 +493,11 @@ function connectToMediaWebSocket(
   conn,
   clientId,
   clientSecret,
-  activeConnections
+  activeConnections,
+  mediaType,
+  mediaTypeFlag
 ) {
-  console.log(`[Media] Connecting for video session ${sessionID}...`);
+  console.log(`[Media] Connecting ${mediaType} for video session ${sessionID}...`);
 
   const wsOptions = {
     rejectUnauthorized: false
@@ -482,8 +506,7 @@ function connectToMediaWebSocket(
   console.log(`Media WebSocket SSL verification disabled`);
 
   const mediaWs = new WebSocket(mediaUrl, [], wsOptions);
-  conn.media.socket = mediaWs;
-  conn.media.state = 'connecting';
+  conn.media[mediaType] = { socket: mediaWs, state: 'connecting', lastKeepAlive: null };
   console.log(`[Media] WebSocket instance created successfully, SSL verification disabled`);
 
   mediaWs.on('open', () => {
@@ -502,44 +525,38 @@ function connectToMediaWebSocket(
       session_id: sessionID,
       rtms_stream_id: streamId,
       signature,
-      media_type: 32, // ALL: audio, video, screen share, transcript, and chat
+      media_type: mediaTypeFlag,
       payload_encryption: false,
-      media_params: {
-        audio: {
+      media_params: mediaType === 'audio' ? { audio: {
           content_type: 2, // RAW_AUDIO
           sample_rate: 1, //16k
           channel: 1, //mono
           codec: 1, //L16
           data_opt: 1, //AUDIO_MIXED_STREAM
           send_rate: 20 //in Milliseconds
-        },
-        video: {
+        } } : mediaType === 'video' ? { video: {
           content_type: 3, // RAW_VIDEO
           codec: 7, //H264
           data_opt: 3, //VIDEO_SINGLE_ACTIVE_STREAM
           resolution: 2, //720p
           fps: 25
-        },
-        deskshare: {
+        } } : mediaType === 'deskshare' ? { deskshare: {
           content_type: 3, // RAW_VIDEO
           codec: 5, //JPG,
           resolution: 2, //720p
           fps: 1
-        },
-        chat: {
+        } } : mediaType === 'chat' ? { chat: {
           content_type: 5, //TEXT
-        },
-        transcript: {
+        } } : { transcript: {
           content_type: 5 //TEXT
-        }
-      }
+        } }
     };
 
 
 
 
     mediaWs.send(JSON.stringify(handshakeMsg));
-    conn.media.state = 'authenticated';
+    conn.media[mediaType].state = 'authenticated';
   });
 
   mediaWs.on('message', (data) => {
@@ -548,13 +565,14 @@ function connectToMediaWebSocket(
       mediaWs,
       signalingSocket,
       sessionID,
-      streamId
+      streamId,
+      mediaType
     });
   });
 
   mediaWs.on('close', async () => {
-    console.warn(`[Media] Closed for ${sessionID}`);
-    conn.media.state = 'closed';
+    console.warn(`[Media] ${mediaType} closed for ${sessionID}`);
+    if (conn.media[mediaType]?.socket === mediaWs) conn.media[mediaType].state = 'closed';
 
     if (!conn.shouldReconnect) {
       console.log(`[Media] Not reconnecting — RTMS was stopped.`);
@@ -575,7 +593,9 @@ function connectToMediaWebSocket(
           conn,
           clientId,
           clientSecret,
-          activeConnections
+          activeConnections,
+          mediaType,
+          mediaTypeFlag
         );
       }, 3000);
     } else {
@@ -593,7 +613,7 @@ function connectToMediaWebSocket(
 
   mediaWs.on('error', (err) => {
     console.error(`[Media] Error: ${err.message}`);
-    conn.media.state = 'error';
+    if (conn.media[mediaType]?.socket === mediaWs) conn.media[mediaType].state = 'error';
   });
 }
 
@@ -748,26 +768,20 @@ function connectToSignalingWebSocket(
         console.log(`[Signaling] Processing handshake response (case 2) for ${sessionID}`);
         console.log(`[Signaling] Handshake response:`, JSON.stringify(msg, null, 2));
         if (msg.status_code === 0) {
-          const mediaUrl = msg.media_server?.server_urls?.all;
-          console.log(`[Signaling] Handshake OK. Media URL: ${mediaUrl}`);
-          if (!mediaUrl) {
-            console.warn(`[Signaling] No unified media URL (server_urls.all) received for ${sessionID}`);
-            break;
-          }
           conn.signaling.state = 'ready';
           console.log(`[Signaling] Connection state updated to 'ready' for ${sessionID}`);
 
-          console.log(`[Signaling] Initiating media WebSocket connection`);
-          connectToMediaWebSocket(
-            mediaUrl,
-            sessionID,
-            streamId,
-            signalingWs,
-            conn,
-            clientId,
-            clientSecret,
-            activeConnections
-          );
+          for (const media of config.mediaTypes) {
+            const mediaUrl = msg.media_server?.server_urls?.[media.name];
+            if (!mediaUrl) {
+              console.warn(`[Signaling] No server_urls.${media.name} received for ${sessionID}`);
+              continue;
+            }
+            connectToMediaWebSocket(
+              mediaUrl, sessionID, streamId, signalingWs, conn,
+              clientId, clientSecret, activeConnections, media.name, media.flag
+            );
+          }
 
           const subscribePayload = {
             msg_type: 5,
@@ -870,9 +884,9 @@ function connectToSignalingWebSocket(
               }
             }
 
-            if (conn.media) {
-              conn.media.state = 'closed';
-              const ws = conn.media.socket;
+            for (const media of Object.values(conn.media || {})) {
+              media.state = 'closed';
+              const ws = media.socket;
               if (ws && typeof ws.close === 'function') {
                 console.log(`[Signaling] Closing media WebSocket for ${sessionID}`);
                 if (ws.readyState === WebSocket.CONNECTING) {
@@ -1033,7 +1047,7 @@ app.post(config.webhookPath, authenticateZoomWebhook(config.zoomSecretToken), as
       serverUrls: server_urls,
       shouldReconnect: true,
       signaling: { socket: null, state: 'connecting', lastKeepAlive: null },
-      media: { socket: null, state: 'idle', lastKeepAlive: null },
+      media: {},
     });
 
     connectToSignalingWebSocket(
@@ -1066,9 +1080,9 @@ app.post(config.webhookPath, authenticateZoomWebhook(config.zoomSecretToken), as
         }
       }
 
-      if (conn.media) {
-        conn.media.state = 'closed';
-        const ws = conn.media.socket;
+      for (const media of Object.values(conn.media || {})) {
+        media.state = 'closed';
+        const ws = media.socket;
         if (ws && typeof ws.close === 'function') {
           if (ws.readyState === WebSocket.CONNECTING) {
             ws.once('open', () => ws.close());
@@ -1103,7 +1117,9 @@ installGracefulShutdown({ name: 'Video SDK RTMS', cleanup: async () => {
   for (const conn of activeConnections.values()) {
     conn.shouldReconnect = false;
     if (conn.signaling?.socket) sockets.push(conn.signaling.socket);
-    if (conn.media?.socket) sockets.push(conn.media.socket);
+    for (const media of Object.values(conn.media || {})) {
+      if (media.socket) sockets.push(media.socket);
+    }
   }
   await Promise.allSettled(sockets.map(closeWebSocket));
   activeConnections.clear();

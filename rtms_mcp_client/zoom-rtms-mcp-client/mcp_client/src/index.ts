@@ -205,7 +205,8 @@ function connectSignaling(state: StreamState): void {
       const message = JSON.parse(data.toString());
       if (message.msg_type === 2 && message.status_code === 0) {
         state.retryCount = 0;
-        const mediaUrl = message.media_server?.server_urls?.transcript || message.media_server?.server_urls?.all;
+        const mediaUrl = message.media_server?.server_urls?.transcript;
+        if (!mediaUrl) throw new Error('Signaling response omitted server_urls.transcript');
         connectMedia(state, mediaUrl);
       } else if (message.msg_type === 2) {
         const duplicate = String(message.reason || '').toLowerCase().includes('duplicate signal request');

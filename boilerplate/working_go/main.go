@@ -28,9 +28,6 @@ var activeConnectionsMu sync.Mutex
 var signalingInFlight = make(map[string]bool)
 var signalingWriteLocks = make(map[string]*sync.Mutex)
 var mediaTypesFlag = 11
-var mediaSocketConnectionMode = "split"
-
-const allIndividualMediaFlags = 1 | 2 | 4 | 8 | 16
 
 var mediaDefinitions = []struct {
 	name string
@@ -62,9 +59,6 @@ func mediaParamsFor(mediaName string) map[string]interface{} {
 		"deskshare":  map[string]interface{}{"content_type": 3, "codec": 5, "resolution": 2, "fps": 1},
 		"transcript": map[string]interface{}{"content_type": 5, "src_language": 9, "enable_lid": true},
 		"chat":       map[string]interface{}{"content_type": 5},
-	}
-	if mediaName == "all" {
-		return params
 	}
 	return map[string]interface{}{mediaName: params[mediaName]}
 }
@@ -261,29 +255,16 @@ func connectToSignalingWebSocket(serverURL, meetingUUID, streamID, clientID, cli
 				activeConnectionsMu.Unlock()
 				if parsed["status_code"].(float64) == 0 {
 					mediaURLs := parsed["media_server"].(map[string]interface{})["server_urls"].(map[string]interface{})
-					if mediaSocketConnectionMode == "unified" {
-						mediaURL, ok := mediaURLs["all"].(string)
-						if !ok || mediaURL == "" {
-							log.Printf("No unified media URL returned for stream %s", streamID)
+					for _, media := range mediaDefinitions {
+						if mediaTypesFlag&media.flag == 0 {
 							continue
 						}
-						go connectToMediaWebSocket(mediaURL, meetingUUID, streamID, clientID, clientSecret, ws, "all", 32)
-					} else {
-						requestedFlags := mediaTypesFlag
-						if requestedFlags == 32 {
-							requestedFlags = allIndividualMediaFlags
+						mediaURL, ok := mediaURLs[media.name].(string)
+						if !ok || mediaURL == "" {
+							log.Printf("No %s media URL returned for stream %s", media.name, streamID)
+							continue
 						}
-						for _, media := range mediaDefinitions {
-							if requestedFlags&media.flag == 0 {
-								continue
-							}
-							mediaURL, ok := mediaURLs[media.name].(string)
-							if !ok || mediaURL == "" {
-								log.Printf("No %s media URL returned for stream %s", media.name, streamID)
-								continue
-							}
-							go connectToMediaWebSocket(mediaURL, meetingUUID, streamID, clientID, clientSecret, ws, media.name, media.flag)
-						}
+						go connectToMediaWebSocket(mediaURL, meetingUUID, streamID, clientID, clientSecret, ws, media.name, media.flag)
 					}
 				} else {
 					log.Printf("Signaling handshake failed for stream %s: status=%v reason=%v", streamID, parsed["status_code"], parsed["reason"])
@@ -397,25 +378,33 @@ func absInt64(value int64) int64 {
 func main() {
 	godotenv.Load()
 
-	configuredFlag, err := strconv.Atoi(strings.TrimSpace(os.Getenv("MEDIA_TYPES_FLAG")))
-	if os.Getenv("MEDIA_TYPES_FLAG") == "" {
-		configuredFlag = 11
-	} else if err != nil {
-		log.Fatal("MEDIA_TYPES_FLAG must be an integer")
+	configuredMedia := strings.TrimSpace(os.Getenv("RTMS_MEDIA_TYPES"))
+	if configuredMedia == "" {
+		log.Fatal("RTMS_MEDIA_TYPES is required (for example: audio,video,transcript)")
 	}
-	if configuredFlag != 32 && (configuredFlag <= 0 || configuredFlag & ^allIndividualMediaFlags != 0) {
-		log.Fatal("MEDIA_TYPES_FLAG must combine 1, 2, 4, 8, and 16, or be 32")
-	}
-	mediaTypesFlag = configuredFlag
-	mediaSocketConnectionMode = strings.ToLower(strings.TrimSpace(os.Getenv("MEDIA_SOCKET_CONNECTION_MODE")))
-	if mediaSocketConnectionMode == "" {
-		mediaSocketConnectionMode = "split"
-	}
-	if mediaSocketConnectionMode != "split" && mediaSocketConnectionMode != "unified" {
-		log.Fatal("MEDIA_SOCKET_CONNECTION_MODE must be split or unified")
-	}
-	if mediaSocketConnectionMode == "unified" && mediaTypesFlag != 32 {
-		log.Fatal("MEDIA_SOCKET_CONNECTION_MODE=unified requires MEDIA_TYPES_FLAG=32")
+	mediaTypesFlag = 0
+	seenMedia := make(map[string]bool)
+	for _, rawName := range strings.Split(configuredMedia, ",") {
+		name := strings.ToLower(strings.TrimSpace(rawName))
+		if seenMedia[name] {
+			log.Fatalf("RTMS_MEDIA_TYPES contains a duplicate type: %s", name)
+		}
+		seenMedia[name] = true
+		found := false
+		for _, media := range mediaDefinitions {
+			publicName := media.name
+			if publicName == "deskshare" {
+				publicName = "screenshare"
+			}
+			if name == publicName {
+				mediaTypesFlag |= media.flag
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Fatalf("Unsupported RTMS media type: %s", name)
+		}
 	}
 
 	port := os.Getenv("PORT")
@@ -435,7 +424,7 @@ func main() {
 	server := &http.Server{Addr: ":" + port}
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Printf("Listening on :%s, webhook path: %s, media mode: %s, media types: %d", port, webhookPath, mediaSocketConnectionMode, mediaTypesFlag)
+		log.Printf("Listening on :%s, webhook path: %s, split media types: %s", port, webhookPath, configuredMedia)
 		serverErrors <- server.ListenAndServe()
 	}()
 

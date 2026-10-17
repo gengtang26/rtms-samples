@@ -1,4 +1,5 @@
 #include <iostream>
+#include <map>
 #include <thread>
 #include <vector>
 #include <algorithm>
@@ -6,6 +7,8 @@
 #include <cstdlib>
 #include <atomic>
 #include <csignal>
+#include <set>
+#include <sstream>
 #include "utils.h"
 #include "nlohmann/json.hpp"
 #include <websocketpp/config/asio_client.hpp>
@@ -23,8 +26,7 @@ using message_ptr = websocketpp::config::asio_client::message_type::ptr;
 
 std::string CLIENT_ID;
 std::string CLIENT_SECRET;
-int MEDIA_TYPES_FLAG = 11;
-std::string MEDIA_SOCKET_CONNECTION_MODE = "split";
+int MEDIA_TYPES_MASK = 0;
 
 void on_message_event(client* c, websocketpp::connection_hdl hdl, message_ptr msg) {
     try {
@@ -167,35 +169,31 @@ int main() {
 
     CLIENT_ID = config_value("CLIENT_ID");
     CLIENT_SECRET = config_value("CLIENT_SECRET");
-    const auto media_types_flag = config_value("MEDIA_TYPES_FLAG");
-    if (!media_types_flag.empty()) {
-        MEDIA_TYPES_FLAG = std::stoi(media_types_flag);
+    const auto media_types = config_value("RTMS_MEDIA_TYPES");
+    if (media_types.empty()) {
+        std::cerr << "RTMS_MEDIA_TYPES is required (for example: audio,video,transcript)\n";
+        return 1;
     }
-    const auto media_socket_connection_mode = config_value("MEDIA_SOCKET_CONNECTION_MODE");
-    if (!media_socket_connection_mode.empty()) {
-        MEDIA_SOCKET_CONNECTION_MODE = media_socket_connection_mode;
-        std::transform(
-            MEDIA_SOCKET_CONNECTION_MODE.begin(), MEDIA_SOCKET_CONNECTION_MODE.end(),
-            MEDIA_SOCKET_CONNECTION_MODE.begin(), ::tolower);
+    MEDIA_TYPES_MASK = 0;
+    const std::map<std::string, int> media_flags = {
+        {"audio", 1}, {"video", 2}, {"screenshare", 4},
+        {"transcript", 8}, {"chat", 16}
+    };
+    std::set<std::string> selected_media;
+    std::stringstream media_stream(media_types);
+    std::string media_name;
+    while (std::getline(media_stream, media_name, ',')) {
+        media_name.erase(std::remove_if(media_name.begin(), media_name.end(), ::isspace), media_name.end());
+        std::transform(media_name.begin(), media_name.end(), media_name.begin(), ::tolower);
+        const auto flag = media_flags.find(media_name);
+        if (flag == media_flags.end() || !selected_media.insert(media_name).second) {
+            std::cerr << "RTMS_MEDIA_TYPES contains an unknown or duplicate type: " << media_name << "\n";
+            return 1;
+        }
+        MEDIA_TYPES_MASK |= flag->second;
     }
 
-    constexpr int all_individual_media_flags = 1 | 2 | 4 | 8 | 16;
-    if (MEDIA_TYPES_FLAG != 32 &&
-        (MEDIA_TYPES_FLAG <= 0 || (MEDIA_TYPES_FLAG & ~all_individual_media_flags) != 0)) {
-        std::cerr << "MEDIA_TYPES_FLAG must combine 1, 2, 4, 8, and 16, or be 32\n";
-        return 1;
-    }
-    if (MEDIA_SOCKET_CONNECTION_MODE != "split" && MEDIA_SOCKET_CONNECTION_MODE != "unified") {
-        std::cerr << "MEDIA_SOCKET_CONNECTION_MODE must be split or unified\n";
-        return 1;
-    }
-    if (MEDIA_SOCKET_CONNECTION_MODE == "unified" && MEDIA_TYPES_FLAG != 32) {
-        std::cerr << "Unified mode requires MEDIA_TYPES_FLAG=32\n";
-        return 1;
-    }
-
-    std::cout << "Media mode=" << MEDIA_SOCKET_CONNECTION_MODE
-              << " media types=" << MEDIA_TYPES_FLAG << std::endl;
+    std::cout << "Split media types=" << media_types << std::endl;
 
     std::string base_ws_url = config_value("ZOOM_EVENT_WS");
     std::cout << "EVENT WS = [" << base_ws_url << "]" << std::endl;

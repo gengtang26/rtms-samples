@@ -17,8 +17,7 @@ using message_ptr = websocketpp::config::asio_client::message_type::ptr;
 
 extern std::string CLIENT_ID;
 extern std::string CLIENT_SECRET;
-extern int MEDIA_TYPES_FLAG;
-extern std::string MEDIA_SOCKET_CONNECTION_MODE;
+extern int MEDIA_TYPES_MASK;
 
 static std::mutex g_stream_lock_mu;
 static std::unordered_set<std::string> g_stream_locks;
@@ -72,35 +71,22 @@ void connect_to_signaling_server(const std::string& server_url, const std::strin
                     c->send(hdl, ready_ack.dump(), websocketpp::frame::opcode::text);
                 };
 
-                if (MEDIA_SOCKET_CONNECTION_MODE == "unified") {
-                    if (!media_urls.contains("all")) {
-                        std::cerr << "Missing server_urls.all for unified mode\n";
-                        return;
+                const std::vector<std::pair<std::string, int>> media_definitions = {
+                    {"audio", 1}, {"video", 2}, {"deskshare", 4},
+                    {"transcript", 8}, {"chat", 16}
+                };
+                for (const auto& [media_name, media_type] : media_definitions) {
+                    if ((MEDIA_TYPES_MASK & media_type) == 0) continue;
+                    if (!media_urls.contains(media_name)) {
+                        std::cerr << "Missing server_urls." << media_name << "\n";
+                        continue;
                     }
-                    std::string media_url = media_urls["all"];
+                    std::string media_url = media_urls[media_name];
                     std::thread([=]() {
                         connect_to_media_server(
-                            media_url, meeting_uuid, stream_id, send_ready_ack, "all", 32);
+                            media_url, meeting_uuid, stream_id,
+                            send_ready_ack, media_name, media_type);
                     }).detach();
-                } else {
-                    const int requested_flags = MEDIA_TYPES_FLAG == 32 ? 31 : MEDIA_TYPES_FLAG;
-                    const std::vector<std::pair<std::string, int>> media_definitions = {
-                        {"audio", 1}, {"video", 2}, {"deskshare", 4},
-                        {"transcript", 8}, {"chat", 16}
-                    };
-                    for (const auto& [media_name, media_type] : media_definitions) {
-                        if ((requested_flags & media_type) == 0) continue;
-                        if (!media_urls.contains(media_name)) {
-                            std::cerr << "Missing server_urls." << media_name << "\n";
-                            continue;
-                        }
-                        std::string media_url = media_urls[media_name];
-                        std::thread([=]() {
-                            connect_to_media_server(
-                                media_url, meeting_uuid, stream_id,
-                                send_ready_ack, media_name, media_type);
-                        }).detach();
-                    }
                 }
             } else {
                 std::cout << "⚠️ Signaling handshake failed for stream " << stream_id

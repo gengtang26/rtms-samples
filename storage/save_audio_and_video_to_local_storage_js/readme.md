@@ -42,8 +42,6 @@ This sample captures real-time audio and video streams from Zoom meetings using 
 | `VIDEO_CLIENT_ID` | No | Video SDK client ID (for Video SDK events) |
 | `VIDEO_CLIENT_SECRET` | No | Video SDK client secret |
 | `VIDEO_SECRET_TOKEN` | No | Video SDK webhook secret token |
-| `MEDIA_SOCKET_CONNECTION_MODE` | No | Socket mode: `split` or `combined` (default: `split`) |
-| `MEDIA_TYPES_FLAG` | No | Media types bitmask: 1=audio, 2=video, 3=both (default: `3`) |
 
 ## Code Walkthrough
 
@@ -53,8 +51,7 @@ This sample captures real-time audio and video streams from Zoom meetings using 
 const rtmsConfig = {
   logging: process.env.LOG_LEVEL || 'info',
   logDir: path.join(__dirname, 'logs'),
-  mediaSocketConnectionMode: process.env.MEDIA_SOCKET_CONNECTION_MODE || 'split',
-  mediaTypesFlag: parseInt(process.env.MEDIA_TYPES_FLAG || '3'),
+  mediaTypes: RTMSManager.MEDIA.AUDIO | RTMSManager.MEDIA.VIDEO,
   credentials: {
     meeting: {
       clientId: process.env.ZOOM_CLIENT_ID,

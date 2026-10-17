@@ -23,6 +23,34 @@ ZOOM_SECRET_TOKEN = os.getenv("ZOOM_SECRET_TOKEN")
 CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
 
+PUBLIC_MEDIA_TYPES = {
+    "audio": ("audio", 1),
+    "video": ("video", 2),
+    "screenshare": ("deskshare", 4),
+    "transcript": ("transcript", 8),
+    "chat": ("chat", 16),
+}
+
+
+def parse_media_types(value):
+    names = [name.strip().lower() for name in (value or "").split(",") if name.strip()]
+    if not names:
+        raise ValueError(
+            "RTMS_MEDIA_TYPES is required; list one or more of: "
+            + ", ".join(PUBLIC_MEDIA_TYPES)
+        )
+    if len(names) != len(set(names)):
+        raise ValueError("RTMS_MEDIA_TYPES must not contain duplicate names")
+    unknown = [name for name in names if name not in PUBLIC_MEDIA_TYPES]
+    if unknown:
+        raise ValueError(
+            f"Unsupported RTMS_MEDIA_TYPES value(s): {', '.join(unknown)}"
+        )
+    return names
+
+
+MEDIA_TYPE_NAMES = parse_media_types(os.getenv("RTMS_MEDIA_TYPES"))
+
 # Setup logging
 logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper(), logging.DEBUG))
 logger = logging.getLogger(__name__)
@@ -83,8 +111,37 @@ def schedule_duplicate_signal_retry(meeting_uuid, stream_id, server_url):
         duplicate_signal_retry_timers[stream_id] = timer
         timer.start()
 
-def connect_to_media_ws(media_url, meeting_uuid, stream_id, signaling_socket):
-    logger.info(f"Connecting to media WebSocket at {media_url}")
+def media_params_for(media_type):
+    params = {
+        "audio": {
+            "content_type": 2,
+            "sample_rate": 1,
+            "channel": 1,
+            "codec": 1,
+            "data_opt": 1,
+            "send_rate": 100,
+        },
+        "video": {
+            "content_type": 3,
+            "codec": 7,
+            "resolution": 2,
+            "fps": 25,
+        },
+        "deskshare": {
+            "content_type": 3,
+            "codec": 5,
+            "resolution": 2,
+            "fps": 1,
+        },
+        "transcript": {"content_type": 5},
+        "chat": {"content_type": 5},
+    }
+    return {media_type: params[media_type]}
+
+
+def connect_to_media_ws(media_url, meeting_uuid, stream_id, signaling_socket,
+                        media_type, media_type_flag):
+    logger.info(f"Connecting {media_type} WebSocket at {media_url}")
 
     def on_open(ws):
         signature = generate_signature(CLIENT_ID, meeting_uuid, stream_id, CLIENT_SECRET)
@@ -94,27 +151,9 @@ def connect_to_media_ws(media_url, meeting_uuid, stream_id, signaling_socket):
             "meeting_uuid": meeting_uuid,
             "rtms_stream_id": stream_id,
             "signature": signature,
-            "media_type": 11,  # AUDIO | VIDEO | TRANSCRIPT
+            "media_type": media_type_flag,
             "payload_encryption": False,
-            "media_params": {
-                "audio": {
-                    "content_type": 2,
-                    "sample_rate": 1,
-                    "channel": 1,
-                    "codec": 1,
-                    "data_opt": 1,
-                    "send_rate": 100
-                },
-                "video": {
-                    "content_type": 3,
-                    "codec": 7,
-                    "resolution": 2,
-                    "fps": 25
-                },
-                "transcript": {
-                    "content_type": 5
-                }
-            }
+            "media_params": media_params_for(media_type),
         }
         ws.send(json.dumps(handshake))
 
@@ -129,7 +168,7 @@ def connect_to_media_ws(media_url, meeting_uuid, stream_id, signaling_socket):
                     "msg_type": 7,
                     "rtms_stream_id": stream_id
                 }))
-                logger.info("Media handshake successful, sent start streaming request")
+                logger.info(f"{media_type} handshake successful, sent start streaming request")
             elif msg_type == 12:
                 ws.send(json.dumps({
                     "msg_type": 13,
@@ -149,19 +188,19 @@ def connect_to_media_ws(media_url, meeting_uuid, stream_id, signaling_socket):
             logger.error(f"Error processing media message: {e}")
 
     def on_error(ws, error):
-        logger.error(f"Media socket error: {error}")
+        logger.error(f"{media_type} socket error: {error}")
 
     def on_close(ws, close_status_code, close_msg):
-        logger.info("Media socket closed")
+        logger.info(f"{media_type} socket closed")
         if meeting_uuid in active_connections:
-            active_connections[meeting_uuid].pop("media", None)
+            active_connections[meeting_uuid].get("media", {}).pop(media_type, None)
 
     ws = websocket.WebSocketApp(media_url,
                                 on_open=on_open,
                                 on_message=on_message,
                                 on_error=on_error,
                                 on_close=on_close)
-    active_connections[meeting_uuid]["media"] = ws
+    active_connections[meeting_uuid].setdefault("media", {})[media_type] = ws
     threading.Thread(target=ws.run_forever, daemon=True).start()
 
 def connect_to_signaling_ws(meeting_uuid, stream_id, server_url):
@@ -202,9 +241,23 @@ def connect_to_signaling_ws(meeting_uuid, stream_id, server_url):
                 with stream_lock:
                     signaling_handshakes_in_flight.discard(stream_id)
                 clear_duplicate_retry_state(stream_id)
-                media_url = msg.get("media_server", {}).get("server_urls", {}).get("all")
-                if media_url:
-                    connect_to_media_ws(media_url, meeting_uuid, stream_id, ws)
+                media_urls = msg.get("media_server", {}).get("server_urls", {})
+                for public_name in MEDIA_TYPE_NAMES:
+                    media_type, media_type_flag = PUBLIC_MEDIA_TYPES[public_name]
+                    media_url = media_urls.get(media_type)
+                    if not media_url:
+                        logger.warning(
+                            f"No server_urls.{media_type} returned for stream {stream_id}"
+                        )
+                        continue
+                    connect_to_media_ws(
+                        media_url,
+                        meeting_uuid,
+                        stream_id,
+                        ws,
+                        media_type,
+                        media_type_flag,
+                    )
             elif msg.get("msg_type") == 2:
                 with stream_lock:
                     signaling_handshakes_in_flight.discard(stream_id)
@@ -236,7 +289,11 @@ def connect_to_signaling_ws(meeting_uuid, stream_id, server_url):
                                 on_message=on_message,
                                 on_error=on_error,
                                 on_close=on_close)
-    active_connections[meeting_uuid] = {"signaling": ws, "stream_id": stream_id}
+    active_connections[meeting_uuid] = {
+        "signaling": ws,
+        "media": {},
+        "stream_id": stream_id,
+    }
     threading.Thread(target=ws.run_forever, daemon=True).start()
 
 def get_zoom_access_token():
@@ -338,9 +395,13 @@ def start_zoom_event_websocket():
                                     signaling_handshakes_in_flight.discard(stream_id)
                                 clear_duplicate_retry_state(stream_id)
                             logger.info(f"🛑 Closing signaling for {meeting_uuid}")
-                            for conn in active_connections[meeting_uuid].values():
+                            connections = active_connections[meeting_uuid]
+                            sockets = [connections.get("signaling")]
+                            sockets.extend(connections.get("media", {}).values())
+                            for conn in sockets:
                                 try:
-                                    conn.close()
+                                    if conn:
+                                        conn.close()
                                 except Exception:
                                     pass
                             del active_connections[meeting_uuid]
@@ -376,7 +437,9 @@ def shutdown(signal_number, _frame):
     if event_websocket:
         event_websocket.close()
     for connections in list(active_connections.values()):
-        for connection in connections.values():
+        sockets = [connections.get("signaling")]
+        sockets.extend(connections.get("media", {}).values())
+        for connection in sockets:
             if hasattr(connection, "close"):
                 try:
                     connection.close()
